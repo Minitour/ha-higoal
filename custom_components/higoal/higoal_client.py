@@ -417,11 +417,15 @@ class HigoalApiClient:
         self._home_ids = None
         self._auth_command = None
 
+    @property
+    def is_signed_in(self):
+        return self._user_id and self._token and self._home_ids
+
     async def sign_in(self):
         """
         Perform log-in with the provided credentials.
         """
-        if self._user_id and self._token and self._home_ids:
+        if self.is_signed_in:
             return
 
         payload = f"password={self._password}&username={self._username}&ver={self._version}"
@@ -441,6 +445,9 @@ class HigoalApiClient:
         """
         Get devices (hosts) assigned to the account.
         """
+        if not self.is_signed_in:
+            await self.sign_in()
+
         devices = []
         for home in self._home_ids:
             payload = f"homeId={home}&token={self._token}&uid={self._user_id}"
