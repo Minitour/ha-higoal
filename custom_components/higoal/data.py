@@ -5,21 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .higoal_client import HigoalApiClient
+
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .api import IntegrationBlueprintApiClient
-    from .coordinator import BlueprintDataUpdateCoordinator
+    from .coordinator import DataUpdateCoordinator
 
-
-type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
+type HigoalConfigEntry = ConfigEntry[IntegrationData]
 
 
 @dataclass
-class IntegrationBlueprintData:
+class IntegrationData:
     """Data for the Blueprint integration."""
-
-    client: IntegrationBlueprintApiClient
-    coordinator: BlueprintDataUpdateCoordinator
+    higoal_client: HigoalApiClient
+    coordinator: DataUpdateCoordinator
     integration: Integration

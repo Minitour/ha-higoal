@@ -9,6 +9,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
 
+from . import HigoalApiClient
 from .api import (
     IntegrationBlueprintApiClient,
     IntegrationBlueprintApiClientAuthenticationError,
@@ -18,7 +19,7 @@ from .api import (
 from .const import DOMAIN, LOGGER
 
 
-class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Blueprint."""
 
     VERSION = 1
@@ -35,15 +36,9 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                 )
-            except IntegrationBlueprintApiClientAuthenticationError as exception:
-                LOGGER.warning(exception)
+            except Exception as e:
+                LOGGER.warning(e)
                 _errors["base"] = "auth"
-            except IntegrationBlueprintApiClientCommunicationError as exception:
-                LOGGER.error(exception)
-                _errors["base"] = "connection"
-            except IntegrationBlueprintApiClientError as exception:
-                LOGGER.exception(exception)
-                _errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(
                     ## Do NOT use this in production code
@@ -81,9 +76,9 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_credentials(self, username: str, password: str) -> None:
         """Validate credentials."""
-        client = IntegrationBlueprintApiClient(
+        higoal_client = HigoalApiClient(
             username=username,
             password=password,
-            session=async_create_clientsession(self.hass),
+            session=async_create_clientsession(self.hass)
         )
-        await client.async_get_data()
+        await higoal_client.sign_in()

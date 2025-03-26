@@ -237,6 +237,7 @@ class Entity:
     name: str
     type: int
     device: 'Device' = field(repr=False)
+    response: bytes = field(repr=False, default=None)
 
     def _get_on_action(self) -> int:
         action = 255
@@ -286,39 +287,37 @@ class Entity:
     def status_command(self):
         return self.device.status_command()
 
-    def is_turned_on(self) -> bool:
+    def is_turned_on(self, use_cache: bool = True) -> bool:
         """
         Check if the switch is turned on or not.
         """
-        response = list(
-            self.device.api.send_command(
-                self.status_command()
-            )
-        )
+        response = self._current_response(use_cache=use_cache)
         return response[18 + self.id] == 255
 
-    def is_online(self):
+    def is_online(self, use_cache: bool = True):
         """
         Check if the switch is online.
         """
-        response = list(
-            self.device.api.send_command(
-                self.status_command()
-            )
-        )
+        response = list(self._current_response(use_cache=use_cache))
         return response[18 + self.id] != 0
 
-    def percentage(self) -> float | None:
+    def percentage(self, use_cache: bool = True) -> float | None:
         """
         Get percentage of blinds 1.0 means fully closed while 0.0 means fully open.
         """
         if self.type != 3:
             return None
-        status = list(
-            self.device.api.send_command(self.status_command())
-        )
+        status = list(self._current_response(use_cache=use_cache))
         value = max(min(status[-10], 100), 0)
         return value / 100
+
+    def _current_response(self, use_cache: bool = True) -> bytes:
+        if use_cache and self.response:
+            return self.response
+
+        return self.device.api.send_command(
+            self.status_command()
+        )
 
 
 @dataclass
@@ -390,6 +389,10 @@ class Device:
             if button.name == name:
                 return button
 
+    def set_current_status_response(self, response: bytes) -> None:
+        for button in self.buttons:
+            button.response = response
+
 
 class HigoalApiClient:
 
@@ -428,6 +431,10 @@ class HigoalApiClient:
         self._user_id = body.get('repData', {}).get('uid')
         self._token = body.get('repData', {}).get('token')
         self._home_ids = [home.get('id') for home in body.get('repData', {}).get('homeList', [])]
+
+        if self._token is None:
+            raise Exception('Log-in failed')
+
         self._auth_command = generate_auth_command(self._token)
 
     async def get_devices(self) -> list[Device]:
@@ -441,7 +448,36 @@ class HigoalApiClient:
             response = await self._session.request("POST", f'{self._url}/get_host_list', data=payload, headers=headers)
             body = await response.json()
             devices.extend(body.get('repData', []))
-        return [Device.init_from(device, self) for device in devices]
+        devices = [Device.init_from(device, self) for device in devices]
+        status_commands = [device.status_command() for device in devices]
+        responses = self.bulk_send_command(status_commands)
+
+        if responses:
+            for device, response in zip(devices, responses):
+                device.set_current_status_response(response)
+
+        return devices
+
+    def bulk_send_command(self, commands: list[bytes]) -> list[bytes] | None:
+        """Send multiple commands at once"""
+        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        responses = []
+        try:
+            remote_socket.connect((self._domain, 17670))
+            remote_socket.sendall(self._auth_command)
+            remote_socket.recv(4096)
+            for command in commands:
+                remote_socket.sendall(command)
+                response = remote_socket.recv(4096)
+                responses.append(response)
+                logger.debug(f'Got Response: {list(response)}')
+        finally:
+            remote_socket.close()
+
+        if len(responses) != len(commands):
+            return []
+
+        return responses
 
     def send_command(self, command: bytes) -> bytes | None:
         """
