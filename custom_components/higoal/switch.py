@@ -5,24 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
-
-from .entity import HigoalEntity
+from .const import DOMAIN
 from .higoal_client import Entity
+from .data import HigoalConfigEntry
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-    from .coordinator import DataUpdateCoordinator
-    from .data import HigoalConfigEntry
-
-ENTITY_DESCRIPTIONS = (
-    SwitchEntityDescription(
-        key="higoal",
-        name="Integration Switch",
-        icon="mdi:format-quote-close",
-    ),
-)
 
 
 async def async_setup_entry(
@@ -36,33 +25,25 @@ async def async_setup_entry(
 
     for device in devices:
         for button in device.buttons:
-            switches.append(
-                HigoalSwitch(
-                    button,
-                    entry.runtime_data.coordinator,
-                    SwitchEntityDescription(
-                        key=f"higoal:{button.device.id}:{button.id}",
-                        name=button.name or 'Unnamed Switch',
-                        icon="mdi:format-quote-close",
-                    )
-                )
-            )
+            if button.type != 1:
+                continue
+
+            switches.append(HigoalSwitch(button))
 
     async_add_entities(switches, True)
 
 
-class HigoalSwitch(HigoalEntity, SwitchEntity):
+class HigoalSwitch(SwitchEntity):
     """higoal switch class."""
 
     def __init__(
             self,
-            entity: Entity,
-            coordinator: DataUpdateCoordinator,
-            entity_description: SwitchEntityDescription,
+            entity: Entity
     ) -> None:
         """Initialize the switch class."""
-        super().__init__(entity, coordinator)
-        self.entity_description = entity_description
+        self._entity = entity
+        self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
+        self._attr_name = entity.name or 'Higoal Switch'
 
     @property
     def is_on(self) -> bool:
@@ -72,9 +53,19 @@ class HigoalSwitch(HigoalEntity, SwitchEntity):
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
         self._entity.turn_on()
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         self._entity.turn_off()
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self._entity.device.id)},  # Same ID as the cover
+            "name": self._entity.device.name,
+            "manufacturer": "HIGOAL",
+            "model": self._entity.device.model_name,
+            "sw_version": self._entity.device.version,
+        }

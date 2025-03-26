@@ -228,6 +228,42 @@ def generate_command(
     return bytes(command)[:-2] + checksum
 
 
+models = {
+    1: "8B",
+    8: "8B",
+    16: "8B",
+    24: "8B",
+    2: "6B",
+    9: "6B",
+    17: "6B",
+    25: "6B",
+    3: "PT",
+    13: "PT",
+    18: "PT",
+    26: "PT",
+    4: "2B",
+    11: "2B",
+    19: "2B",
+    27: "2B",
+    5: "4B",
+    10: "4B",
+    20: "4B",
+    28: "4B",
+    6: "2R",
+    15: "2R",
+    21: "2R",
+    29: "2R",
+    7: "SOCKET",
+    14: "SOCKET",
+    23: "SOCKET",
+    30: "SOCKET",
+    12: "IR",
+    22: "IR",
+    31: "PIMA",
+    160: "C4"
+}
+
+
 @dataclass
 class Entity:
     """
@@ -263,7 +299,7 @@ class Entity:
             entity_type=self.type,
             action=action
         )
-        self.device.api.send_command(cmd)
+        self.response = self.device.api.send_command(cmd)
 
     def turn_off(self):
         """
@@ -282,7 +318,7 @@ class Entity:
             entity_type=self.type,
             action=action
         )
-        self.device.api.send_command(cmd)
+        self.response = self.device.api.send_command(cmd)
 
     def status_command(self):
         return self.device.status_command()
@@ -319,6 +355,22 @@ class Entity:
             self.status_command()
         )
 
+    def get_related_entity(self) -> 'Entity' | None:
+        if self.type != 3:
+            return None
+        if self.name == '':
+            return None
+        index = 0
+        for index, button in enumerate(self.device.buttons):
+            if button == self:
+                break
+        if index + 1 >= len(self.device.buttons):
+            return None
+        button = self.device.buttons[index + 1]
+        if button.type != 3:
+            return None
+        return button
+
 
 @dataclass
 class Device:
@@ -335,6 +387,10 @@ class Device:
     version: str
     buttons: list[Entity]
     api: 'HigoalApiClient' = field(repr=False)
+
+    @property
+    def model_name(self):
+        return models.get(self.type) or 'UNKNOWN'
 
     @classmethod
     def init_from(cls, device: dict, api: 'HigoalApiClient') -> 'Device':
@@ -406,6 +462,7 @@ class HigoalApiClient:
             session: aiohttp.ClientSession = None,
     ):
         self._session = session
+        self.remote_socket = None
         self._username = username
         self._password = password
         self._version = version
@@ -416,6 +473,12 @@ class HigoalApiClient:
         self._token = None
         self._home_ids = None
         self._auth_command = None
+
+    def _init_socket(self):
+        self.remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.remote_socket.connect((self._domain, 17670))
+        self.remote_socket.sendall(self._auth_command)
+        self.remote_socket.recv(4096)
 
     @property
     def is_signed_in(self):
@@ -457,7 +520,7 @@ class HigoalApiClient:
             devices.extend(body.get('repData', []))
         devices = [Device.init_from(device, self) for device in devices]
         status_commands = [device.status_command() for device in devices]
-        responses = self.bulk_send_command(status_commands)
+        responses = [self.send_command(command) for command in status_commands]
 
         if responses:
             for device, response in zip(devices, responses):
@@ -465,41 +528,22 @@ class HigoalApiClient:
 
         return devices
 
-    def bulk_send_command(self, commands: list[bytes]) -> list[bytes] | None:
-        """Send multiple commands at once"""
-        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        responses = []
-        try:
-            remote_socket.connect((self._domain, 17670))
-            remote_socket.sendall(self._auth_command)
-            remote_socket.recv(4096)
-            for command in commands:
-                remote_socket.sendall(command)
-                response = remote_socket.recv(4096)
-                responses.append(response)
-                logger.debug(f'Got Response: {list(response)}')
-        finally:
-            remote_socket.close()
-
-        if len(responses) != len(commands):
-            return []
-
-        return responses
-
-    def send_command(self, command: bytes) -> bytes | None:
+    def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
         """
         Opens a socket, sends the command, waits for a response, and then closes the socket.
         """
+        if not self.remote_socket:
+            self._init_socket()
+
+        if max_attempts == 0:
+            return None
         logger.debug(f'Sending command: {list(command)}')
-        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            remote_socket.connect((self._domain, 17670))
-            remote_socket.sendall(self._auth_command)
-            remote_socket.recv(4096)
-            remote_socket.sendall(command)
-            response = remote_socket.recv(4096)
+            self.remote_socket.sendall(command)
+            response = self.remote_socket.recv(4096)
             logger.debug(f'Got Response: {list(response)}')
-        finally:
-            remote_socket.close()
+        except (socket.gaierror, socket.timeout, ConnectionRefusedError, socket.error):
+            self._init_socket()
+            return self.send_command(command, max_attempts - 1)
 
         return response
