@@ -355,7 +355,7 @@ class Entity:
             self.status_command()
         )
 
-    def get_related_entity(self) -> 'Entity' | None:
+    def get_related_entity(self) -> 'Entity':
         if self.type != 3:
             return None
         if self.name == '':
