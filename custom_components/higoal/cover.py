@@ -1,10 +1,17 @@
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass
 
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
 from .higoal_client import Entity
 from .const import DOMAIN
 
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-async def async_setup_entry(hass, entry, async_add_entities):
+
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
     """Set up the cover platform."""
     devices = await entry.runtime_data.higoal_client.get_devices()
     covers = []
@@ -34,7 +41,7 @@ class HigoalCover(CoverEntity):
 
     @property
     def device_class(self):
-        return CoverDeviceClass.BLIND
+        return CoverDeviceClass.SHUTTER
 
     def set_cover_position(self):
         value = int(self._open_button.percentage() * 100)
@@ -42,10 +49,12 @@ class HigoalCover(CoverEntity):
 
     async def async_open_cover(self, **kwargs):
         self._open_button.turn_on()
+        self.set_cover_position()
         self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         self._close_button.turn_on()
+        self.set_cover_position()
         self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
@@ -53,6 +62,7 @@ class HigoalCover(CoverEntity):
             self._close_button.turn_off()
         elif self.is_opening:
             self._open_button.turn_off()
+        self.set_cover_position()
         self.async_write_ha_state()
 
     @property

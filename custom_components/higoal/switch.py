@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.components.switch import SwitchEntity
+
 from .const import DOMAIN
-from .higoal_client import Entity
 from .data import HigoalConfigEntry
+from .higoal_client import Entity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
