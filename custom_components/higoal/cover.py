@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from xml.etree.ElementPath import prepare_parent
 
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass
 from typing import TYPE_CHECKING, Any
@@ -44,6 +45,7 @@ class HigoalCover(CoverEntity):
         self._close_button = close_button
         self._attr_unique_id = f"higoal:{open_button.device.id}:{open_button.id}"
         self._attr_name = open_button.name or 'Higoal Cover'
+        self._is_closed = False
         self._cover_position = 0
         self._is_closing = False
         self._is_opening = False
@@ -56,6 +58,18 @@ class HigoalCover(CoverEntity):
     def current_cover_position(self):
         """Return the position of the cover (0 = closed, 100 = open)."""
         return self._cover_position
+
+    @property
+    def is_closed(self) -> bool | None:
+        return self._is_closed
+
+    @property
+    def is_closing(self) -> bool | None:
+        return self._is_closing
+
+    @property
+    def is_opening(self) -> bool | None:
+        return self._is_opening
 
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
@@ -75,6 +89,7 @@ class HigoalCover(CoverEntity):
     async def refresh(self, *args, **kwargs):
         value = int(await self._open_button.percentage(use_cache=False) * 100)
         self._cover_position = 100 - value
+        self._is_closed = self._cover_position == 0
         self._close_button.response = self._open_button.response
 
         # the following statements use the cached response
