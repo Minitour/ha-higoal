@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .coordinator import DataUpdateCoordinator
-
 type HigoalConfigEntry = ConfigEntry[IntegrationData]
 
 
@@ -20,5 +18,4 @@ type HigoalConfigEntry = ConfigEntry[IntegrationData]
 class IntegrationData:
     """Data for the Blueprint integration."""
     higoal_client: HigoalApiClient
-    coordinator: DataUpdateCoordinator
     integration: Integration

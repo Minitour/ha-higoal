@@ -1,12 +1,10 @@
-import logging
+import asyncio
 import random
 import socket
 from dataclasses import dataclass, field
 
 import aiohttp
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+from .const import LOGGER as logger
 
 
 class ChecksumHandler:
@@ -286,7 +284,7 @@ class Entity:
             return 0
         return 240
 
-    def turn_on(self):
+    async def turn_on(self):
         """
         Turn on the switch
         """
@@ -299,15 +297,15 @@ class Entity:
             entity_type=self.type,
             action=action
         )
-        self.response = self.device.api.send_command(cmd)
+        self.response = await self.device.api.send_command(cmd)
 
-    def turn_off(self):
+    async def turn_off(self):
         """
         Turn off the switch
         """
         if self.type == 3:
             # for type 3 the turn-off command is the same as the turn-on command.
-            self.turn_on()
+            await self.turn_on()
             return
         action = self._get_off_action()
         cmd = generate_command(
@@ -318,39 +316,39 @@ class Entity:
             entity_type=self.type,
             action=action
         )
-        self.response = self.device.api.send_command(cmd)
+        self.response = await self.device.api.send_command(cmd)
 
     def status_command(self):
         return self.device.status_command()
 
-    def is_turned_on(self, use_cache: bool = True) -> bool:
+    async def is_turned_on(self, use_cache: bool = True) -> bool:
         """
         Check if the switch is turned on or not.
         """
-        response = self._current_response(use_cache=use_cache)
+        response = await self._current_response(use_cache=use_cache)
         return response[18 + self.id] == 255
 
-    def is_online(self, use_cache: bool = True):
+    async def is_online(self, use_cache: bool = True):
         """
         Check if the switch is online.
         """
-        response = list(self._current_response(use_cache=use_cache))
+        response = list(await self._current_response(use_cache=use_cache))
         return response[18 + self.id] != 0
 
-    def percentage(self, use_cache: bool = True) -> float | None:
+    async def percentage(self, use_cache: bool = True) -> float | None:
         """
         Get percentage of blinds 1.0 means fully closed while 0.0 means fully open.
         """
         if self.type != 3:
             return None
-        status = list(self._current_response(use_cache=use_cache))
+        status = list(await self._current_response(use_cache=use_cache))
         value = max(min(status[-10], 100), 0)
         return value / 100
 
-    def _current_response(self, use_cache: bool = True) -> bytes:
+    async def _current_response(self, use_cache: bool = True) -> bytes:
         if use_cache and self.response and len(self.response) >= 48:
             return self.response
-        self.response = self.device.api.send_command(
+        self.response = await self.device.api.send_command(
             self.status_command()
         )
         return self.response
@@ -450,6 +448,27 @@ class Device:
             button.response = response
 
 
+class SocketClient:
+    """A client connecting to the async server via a basic socket."""
+
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+
+    async def connect(self):
+        reader, writer = await asyncio.open_connection(self.host, self.port)
+        self.reader = reader
+        self.writer = writer
+
+    async def write(self, message: bytes):
+        self.writer.write(message)
+        await self.writer.drain()
+        return await self.reader.read(96)
+
+    def close(self):
+        self.writer.close()
+
+
 class HigoalApiClient:
 
     def __init__(
@@ -474,17 +493,16 @@ class HigoalApiClient:
         self._home_ids = None
         self._auth_command = None
 
-    def _init_socket(self):
+    async def _init_socket(self):
         if self.remote_socket:
             try:
                 self.remote_socket.close()
             except Exception:
                 pass
 
-        self.remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.remote_socket.connect((self._domain, 17670))
-        self.remote_socket.sendall(self._auth_command)
-        self.remote_socket.recv(96)
+        self.remote_socket = SocketClient(self._domain, 17670)
+        await self.remote_socket.connect()
+        await self.remote_socket.write(self._auth_command)
         logger.info('Connected to remote socket')
 
     @property
@@ -527,7 +545,7 @@ class HigoalApiClient:
             devices.extend(body.get('repData', []))
         devices = [Device.init_from(device, self) for device in devices]
         status_commands = [device.status_command() for device in devices]
-        responses = [self.send_command(command) for command in status_commands]
+        responses = [await self.send_command(command) for command in status_commands]
 
         if responses:
             for device, response in zip(devices, responses):
@@ -535,24 +553,23 @@ class HigoalApiClient:
 
         return devices
 
-    def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
+    async def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
         """
         Opens a socket, sends the command, waits for a response, and then closes the socket.
         """
         if not self.remote_socket:
-            self._init_socket()
+            await self._init_socket()
 
         if max_attempts == 0:
             return None
         logger.debug(f'Sending command: {list(command)}')
         try:
-            self.remote_socket.sendall(command)
-            response = self.remote_socket.recv(96)
+            response = await self.remote_socket.write(command)
             logger.debug(f'Got Response: {list(response)}')
             if len(response) < 48:
                 raise socket.error()
         except (socket.gaierror, socket.timeout, ConnectionRefusedError, socket.error):
-            self._init_socket()
-            return self.send_command(command, max_attempts - 1)
+            await self._init_socket()
+            return await self.send_command(command, max_attempts - 1)
 
         return response
