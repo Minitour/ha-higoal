@@ -272,8 +272,8 @@ class Entity:
     id: int
     name: str
     type: int
-    device: 'Device' = field(repr=False)
-    response: bytes = field(repr=False, default=None)
+    device: 'Device' = field(repr=False, metadata={"include_in_dict": True})
+    response: bytes = field(repr=False, default=None, metadata={"include_in_dict": True})
 
     def _get_on_action(self) -> int:
         action = 255
@@ -348,12 +348,12 @@ class Entity:
         return value / 100
 
     def _current_response(self, use_cache: bool = True) -> bytes:
-        if use_cache and self.response:
+        if use_cache and self.response and len(self.response) >= 48:
             return self.response
-
-        return self.device.api.send_command(
+        self.response = self.device.api.send_command(
             self.status_command()
         )
+        return self.response
 
     def get_related_entity(self) -> 'Entity':
         if self.type != 3:
@@ -385,8 +385,8 @@ class Device:
     ssid: str
     mac: str
     version: str
-    buttons: list[Entity]
-    api: 'HigoalApiClient' = field(repr=False)
+    buttons: list[Entity] = field(repr=False)
+    api: 'HigoalApiClient' = field(repr=False, metadata={"include_in_dict": True})
 
     @property
     def model_name(self):
@@ -475,10 +475,17 @@ class HigoalApiClient:
         self._auth_command = None
 
     def _init_socket(self):
+        if self.remote_socket:
+            try:
+                self.remote_socket.close()
+            except Exception:
+                pass
+
         self.remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.remote_socket.connect((self._domain, 17670))
         self.remote_socket.sendall(self._auth_command)
-        self.remote_socket.recv(4096)
+        self.remote_socket.recv(96)
+        logger.info('Connected to remote socket')
 
     @property
     def is_signed_in(self):
@@ -540,8 +547,10 @@ class HigoalApiClient:
         logger.debug(f'Sending command: {list(command)}')
         try:
             self.remote_socket.sendall(command)
-            response = self.remote_socket.recv(4096)
+            response = self.remote_socket.recv(96)
             logger.debug(f'Got Response: {list(response)}')
+            if len(response) < 48:
+                raise socket.error()
         except (socket.gaierror, socket.timeout, ConnectionRefusedError, socket.error):
             self._init_socket()
             return self.send_command(command, max_attempts - 1)

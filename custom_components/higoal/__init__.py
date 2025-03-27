@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 PLATFORMS: list[Platform] = [
     Platform.SWITCH,
+    Platform.COVER
 ]
 
 

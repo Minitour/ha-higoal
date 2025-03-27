@@ -17,3 +17,5 @@ coverage.xml
 config/*
 !config/configuration.yaml
 .idea/
+
+custom_components/higoal/test.py
