@@ -1,6 +1,6 @@
-from homeassistant.components.cover import CoverEntity, CoverDeviceClass
-
 from __future__ import annotations
+
+from homeassistant.components.cover import CoverEntity, CoverDeviceClass
 from typing import TYPE_CHECKING, Any
 
 from .higoal_client import Entity
