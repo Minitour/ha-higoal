@@ -447,6 +447,9 @@ class Device:
         for button in self.buttons:
             button.response = response
 
+# mutex lock to avoid parallel writes to the socket.
+lock = asyncio.Lock()
+
 
 class SocketClient:
     """A client connecting to the async server via a basic socket."""
@@ -463,12 +466,17 @@ class SocketClient:
         self.writer = writer
 
     async def write(self, message: bytes) -> bytes:
-        if not self.writer:
-            await self.connect()
+        await lock.acquire()
+        try:
+            if not self.writer:
+                await self.connect()
 
-        self.writer.write(message)
-        await self.writer.drain()
-        return await self.reader.read(96)
+            self.writer.write(message)
+            await self.writer.drain()
+            result = await self.reader.read(96)
+        finally:
+            lock.release()
+        return result
 
     def close(self):
         try:
