@@ -76,3 +76,4 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             session=async_create_clientsession(self.hass)
         )
         await higoal_client.sign_in()
+        higoal_client.remote_socket.close()

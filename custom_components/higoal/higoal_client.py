@@ -454,19 +454,27 @@ class SocketClient:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
+        self.reader = None
+        self.writer = None
 
     async def connect(self):
         reader, writer = await asyncio.open_connection(self.host, self.port)
         self.reader = reader
         self.writer = writer
 
-    async def write(self, message: bytes):
+    async def write(self, message: bytes) -> bytes:
+        if not self.writer:
+            await self.connect()
+
         self.writer.write(message)
         await self.writer.drain()
         return await self.reader.read(96)
 
     def close(self):
-        self.writer.close()
+        try:
+            self.writer.close()
+        except Exception:
+            pass
 
 
 class HigoalApiClient:
@@ -495,10 +503,7 @@ class HigoalApiClient:
 
     async def _init_socket(self):
         if self.remote_socket:
-            try:
-                self.remote_socket.close()
-            except Exception:
-                pass
+            self.remote_socket.close()
 
         self.remote_socket = SocketClient(self._domain, 17670)
         await self.remote_socket.connect()
@@ -528,6 +533,7 @@ class HigoalApiClient:
             raise Exception('Log-in failed')
 
         self._auth_command = generate_auth_command(self._token)
+        await self._init_socket()
 
     async def get_devices(self) -> list[Device]:
         """
