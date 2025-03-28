@@ -7,6 +7,7 @@ https://github.com/ludeeus/integration_blueprint
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
@@ -42,7 +43,7 @@ async def async_setup_entry(
     )
     await api.connect()
 
-    data_coordinator = Coordinator(hass, entry, api)
+    data_coordinator = Coordinator(hass, entry, api, update_interval=timedelta(minutes=5))
     await data_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = IntegrationData(
