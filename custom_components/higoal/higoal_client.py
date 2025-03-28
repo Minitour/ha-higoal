@@ -227,6 +227,7 @@ def generate_command(
     checksum = bytes(ChecksumHandler.get_checksum(command, 2, 20))
     return bytes(command)[:-2] + checksum
 
+
 # Mappings from device type (int) to model name.
 models = {
     1: "8B",
@@ -326,14 +327,14 @@ class Entity:
         Check if the switch is turned on or not.
         """
         response = await self._current_response(use_cache=use_cache)
-        return response[18 + self.id - 1] == 255
+        return response[18 + self.id] == 255
 
     async def is_online(self, use_cache: bool = True):
         """
         Check if the switch is online.
         """
         response = list(await self._current_response(use_cache=use_cache))
-        return response[18 + self.id - 1] != 0
+        return response[18 + self.id] != 0
 
     async def percentage(self, use_cache: bool = True) -> float | None:
         """
@@ -480,7 +481,7 @@ class SocketClient:
             logger.debug(f'Sending: {list(message)}')
             self.writer.write(message)
             await self.writer.drain()
-            result = await asyncio.wait_for(self.reader.read(48), timeout=1.5)
+            result = await asyncio.wait_for(self.reader.read(4096), timeout=1.5)
             logger.debug(f'Received: {list(result)}')
         except asyncio.TimeoutError as e:
             raise e
@@ -571,12 +572,13 @@ class HigoalApiClient:
             body = await response.json()
             devices.extend(body.get('repData', []))
         devices = [Device.init_from(device, self) for device in devices]
-        status_commands = [device.status_command() for device in devices]
-        responses = [await self.send_command(command) for command in status_commands]
 
-        if responses:
-            for device, response in zip(devices, responses):
-                device.set_current_status_response(response)
+        for device in devices:
+            device.set_current_status_response(
+                await self.send_command(
+                    device.status_command(),
+                )
+            )
         return devices
 
     async def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
