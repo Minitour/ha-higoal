@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .data import HigoalConfigEntry
 from .higoal_client import Entity
-
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant, callback
-    from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
 async def async_setup_entry(
