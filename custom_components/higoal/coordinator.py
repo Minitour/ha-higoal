@@ -5,7 +5,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from . import HigoalApiClient
 from .const import LOGGER as _LOGGER
 
 
@@ -16,7 +15,7 @@ class Coordinator(DataUpdateCoordinator):
             self,
             hass: HomeAssistant,
             config_entry: ConfigEntry,
-            api: HigoalApiClient,
+            api: 'HigoalApiClient',
             update_interval: timedelta = timedelta(minutes=1)
     ):
         """Initialize my coordinator."""
