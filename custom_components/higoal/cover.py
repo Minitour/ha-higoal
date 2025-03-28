@@ -96,7 +96,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         self._cover_position = 100 - value
         self._is_closed = self._cover_position == 0
         self._is_opening = open_data['state']['is_turned_on']
-        self._is_closing = open_data['close_data']['is_turned_on']
+        self._is_closing = close_data['state']['is_turned_on']
         self.async_write_ha_state()
 
     @property
