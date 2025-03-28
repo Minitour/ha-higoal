@@ -228,6 +228,15 @@ def generate_command(
     return bytes(command)[:-2] + checksum
 
 
+def verify_response(command: bytes, response: bytes):
+    return all(
+        [
+            command[9:13] == response[9:13],
+            command[14] == response[14]
+        ]
+    )
+
+
 # Mappings from device type (int) to model name.
 models = {
     1: "8B",
@@ -594,6 +603,8 @@ class HigoalApiClient:
             response = await self._socket_client.write(command)
             if len(response) < 48:
                 raise socket.error()
+            if not verify_response(command, response):
+                raise Exception('Received response for a different command')
         except Exception as e:
             # If the socket is not working refresh it.
             logger.info(f'Failed to send command ({e}). Retrying.')
