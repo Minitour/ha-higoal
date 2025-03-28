@@ -586,18 +586,15 @@ class HigoalApiClient:
         await self.refresh_connection_if_needed()
 
         if max_attempts == 0:
-            logger.exception('Failed to send command after 3 attempts')
+            logger.error('Failed to send command after 3 attempts')
             return None
-
-        logger.debug(f'Sending command: {list(command)}')
         try:
             response = await self._socket_client.write(command)
-            logger.debug(f'Got Response: {list(response)}')
             if len(response) < 48:
                 raise socket.error()
-        except Exception:
+        except Exception as e:
             # If the socket is not working refresh it.
-            logger.exception('Failed to send command. Retrying.')
+            logger.info(f'Failed to send command ({e}). Retrying.')
             await self.refresh_connection_if_needed(force=True)
             return await self.send_command(command, max_attempts - 1)
 

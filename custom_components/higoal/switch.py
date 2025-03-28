@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, logger
 from .data import HigoalConfigEntry
 from .higoal_client import Entity
 
@@ -69,6 +69,7 @@ class HigoalSwitch(CoordinatorEntity, SwitchEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         data = self.coordinator.data.get(self._attr_unique_id)
+        logger.debug('[%s] Updated data: %s', self._attr_unique_id, data)
         self._entity = data['entity']
         self._state = data['state']['is_turned_on']
         self.async_write_ha_state()
