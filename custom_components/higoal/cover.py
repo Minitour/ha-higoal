@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from xml.etree.ElementPath import prepare_parent
+from typing import TYPE_CHECKING
 
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass
-from typing import TYPE_CHECKING, Any
 
-from homeassistant.helpers.event import async_track_time_interval
-
-from .higoal_client import Entity
 from .const import DOMAIN
+from .higoal_client import Entity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -33,8 +29,6 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
             covers.append(HigoalCover(open_blind, close_blind))
 
     async_add_entities(covers, True)
-    for cover in covers:
-        async_track_time_interval(hass, cover.refresh, timedelta(seconds=30))
 
 
 class HigoalCover(CoverEntity):
@@ -74,21 +68,21 @@ class HigoalCover(CoverEntity):
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
         self._is_opening = True
-        self.schedule_update_ha_state()
+        self._async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
         self._is_closing= True
-        self.schedule_update_ha_state()
+        self._async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         if self.is_closing:
             await self._close_button.turn_off()
         elif self.is_opening:
             await self._open_button.turn_off()
-        self.schedule_update_ha_state()
+        self._async_write_ha_state()
 
-    async def refresh(self, *args, **kwargs):
+    async def async_update(self):
         value = int(await self._open_button.percentage(use_cache=False) * 100)
         self._cover_position = 100 - value
         self._is_closed = self._cover_position == 0
@@ -97,7 +91,6 @@ class HigoalCover(CoverEntity):
         # the following statements use the cached response
         self._is_opening = await self._open_button.is_turned_on()
         self._is_closing = await self._close_button.is_turned_on()
-        self.schedule_update_ha_state()
 
     @property
     def device_info(self):

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
 from .data import HigoalConfigEntry
@@ -35,8 +33,6 @@ async def async_setup_entry(
 
     async_add_entities(switches, True)
 
-    for switch in switches:
-        async_track_time_interval(hass, switch.refresh, timedelta(minutes=1))
 
 
 class HigoalSwitch(SwitchEntity):
@@ -61,18 +57,17 @@ class HigoalSwitch(SwitchEntity):
         """Turn on the switch."""
         await self._entity.turn_on()
         self._state = await self._entity.is_turned_on()
-        self.schedule_update_ha_state()
+        self._async_write_ha_state()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         await self._entity.turn_off()
         self._state = await self._entity.is_turned_on()
-        self.schedule_update_ha_state()
+        self._async_write_ha_state()
 
-    async def refresh(self, *args, **kwargs) -> None:
+    async def async_update(self) -> None:
         """Refresh the switch."""
-        self._state = await self._entity.is_turned_on()
-        self.schedule_update_ha_state()
+        self._state = await self._entity.is_turned_on(use_cache=False)
 
     @property
     def device_info(self):
