@@ -57,12 +57,14 @@ class Coordinator(DataUpdateCoordinator):
                 self.devices = devices
                 for device in devices:
                     for button in device.buttons:
-                        data[f'higoal:{button.device.id}:{button.id}']['entity'] = button
-                        data[f'higoal:{button.device.id}:{button.id}']['state'] = {
+                        element = dict()
+                        element['entity'] = button
+                        element['state'] = {
                             'is_turned_on': await button.is_turned_on(),
                             'is_online': await button.is_online(),
                             'percentage': await button.percentage()
                         }
+                        data[f'higoal:{button.device.id}:{button.id}'] = element
             return data
         except Exception as err:
             logger.exception(err)
