@@ -1,7 +1,9 @@
 import asyncio
 import random
 import socket
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
 
 import aiohttp
 from .const import LOGGER as logger
@@ -508,6 +510,7 @@ class HigoalApiClient:
         self._token = None
         self._home_ids = None
         self._auth_command = None
+        self._sign_in_time = None
 
     async def _init_socket(self):
         if self.remote_socket:
@@ -540,6 +543,8 @@ class HigoalApiClient:
         if self._token is None:
             raise Exception('Log-in failed')
 
+        self._sign_in_time = datetime.now(timezone.utc)
+
         self._auth_command = generate_auth_command(self._token)
         await self._init_socket()
 
@@ -571,6 +576,9 @@ class HigoalApiClient:
         """
         Opens a socket, sends the command, waits for a response, and then closes the socket.
         """
+
+        await self.refresh_connection_if_needed()
+
         if not self.remote_socket:
             await self._init_socket()
 
@@ -587,3 +595,14 @@ class HigoalApiClient:
             return await self.send_command(command, max_attempts - 1)
 
         return response
+
+    async def refresh_connection_if_needed(self):
+        now = datetime.now(timezone.utc)
+        if abs(now - self._sign_in_time) < timedelta(minutes=30):
+            return
+
+        # session has been active for 30+ minutes, refresh it.
+        self._user_id = None
+        self._token = None
+        self._home_ids = None
+        await self.sign_in()
