@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
 from .const import DOMAIN, LOGGER
+from .coordinator import Coordinator
 from .data import IntegrationData
 from .higoal_client import HigoalApiClient
 
@@ -34,17 +35,19 @@ async def async_setup_entry(
         entry: HigoalConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
-
     api = HigoalApiClient(
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         session=async_get_clientsession(hass),
     )
     await api.connect()
-    await api.get_devices()
+
+    data_coordinator = Coordinator(hass, entry, api)
+    await data_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = IntegrationData(
         higoal_client=api,
+        coordinator=data_coordinator,
         integration=async_get_loaded_integration(hass, entry.domain)
     )
 

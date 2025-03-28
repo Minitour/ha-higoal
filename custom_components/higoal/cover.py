@@ -3,18 +3,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .higoal_client import Entity
 
 if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, callback
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
     """Set up the cover platform."""
-    devices = await entry.runtime_data.higoal_client.get_devices()
+    devices = await entry.runtime_data.coordinator.devices
     covers = []
     for device in devices:
         for button in device.buttons:
@@ -26,15 +27,16 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
             open_blind = button
             close_blind = button.get_related_entity()
 
-            covers.append(HigoalCover(open_blind, close_blind))
+            covers.append(HigoalCover(entry.runtime_data.coordinator, open_blind, close_blind))
 
     async_add_entities(covers, True)
 
 
-class HigoalCover(CoverEntity):
+class HigoalCover(CoordinatorEntity, CoverEntity):
     """Representation of a smart blind."""
 
-    def __init__(self, open_button: Entity, close_button: Entity):
+    def __init__(self, coordinator, open_button: Entity, close_button: Entity):
+        super().__init__(coordinator)
         self._open_button = open_button
         self._close_button = close_button
         self._attr_unique_id = f"higoal:{open_button.device.id}:{open_button.id}"
@@ -68,29 +70,35 @@ class HigoalCover(CoverEntity):
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
         self._is_opening = True
-        self._async_write_ha_state()
+        await self.coordinator.async_request_refresh()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
-        self._is_closing= True
-        self._async_write_ha_state()
+        self._is_closing = True
+        await self.coordinator.async_request_refresh()
 
     async def async_stop_cover(self, **kwargs):
         if self.is_closing:
             await self._close_button.turn_off()
         elif self.is_opening:
             await self._open_button.turn_off()
-        self._async_write_ha_state()
+        await self.coordinator.async_request_refresh()
 
-    async def async_update(self):
-        value = int(await self._open_button.percentage(use_cache=False) * 100)
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        open_data = self.coordinator.data.get(f'higoal:{self._open_button.device.id}:{self._open_button.id}')
+        close_data = self.coordinator.data.get(f'higoal:{self._close_button.device.id}:{self._close_button.id}')
+
+        self._open_button = open_data['entity']
+        self._open_button = close_data['entity']
+
+        value = int(open_data['state']['percentage'] * 100)
         self._cover_position = 100 - value
         self._is_closed = self._cover_position == 0
-        self._close_button.response = self._open_button.response
-
-        # the following statements use the cached response
-        self._is_opening = await self._open_button.is_turned_on()
-        self._is_closing = await self._close_button.is_turned_on()
+        self._is_opening = open_data['state']['is_turned_on']
+        self._is_closing = open_data['close_data']['is_turned_on']
+        self.async_write_ha_state()
 
     @property
     def device_info(self):

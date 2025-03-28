@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .data import HigoalConfigEntry
 from .higoal_client import Entity
 
 if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, callback
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
@@ -21,7 +22,7 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the switch platform."""
-    devices = await entry.runtime_data.higoal_client.get_devices()
+    devices = await entry.runtime_data.coordinator.devices
     switches = []
 
     for device in devices:
@@ -29,19 +30,20 @@ async def async_setup_entry(
             if button.type != 1:
                 continue
 
-            switches.append(HigoalSwitch(button))
+            switches.append(HigoalSwitch(entry.runtime_data.coordinator, button))
 
     async_add_entities(switches, True)
 
 
-
-class HigoalSwitch(SwitchEntity):
+class HigoalSwitch(CoordinatorEntity, SwitchEntity):
     """higoal switch class."""
 
     def __init__(
             self,
+            coordinator,
             entity: Entity
     ) -> None:
+        super().__init__(coordinator)
         """Initialize the switch class."""
         self._entity = entity
         self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
@@ -57,17 +59,21 @@ class HigoalSwitch(SwitchEntity):
         """Turn on the switch."""
         await self._entity.turn_on()
         self._state = await self._entity.is_turned_on()
-        self._async_write_ha_state()
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         await self._entity.turn_off()
         self._state = await self._entity.is_turned_on()
-        self._async_write_ha_state()
+        await self.coordinator.async_request_refresh()
 
-    async def async_update(self) -> None:
-        """Refresh the switch."""
-        self._state = await self._entity.is_turned_on(use_cache=False)
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        data = self.coordinator.data.get(self._attr_unique_id)
+        self._entity = data['entity']
+        self._state = data['state']['is_turned_on']
+        self.async_write_ha_state()
 
     @property
     def device_info(self):

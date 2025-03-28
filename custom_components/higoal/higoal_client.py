@@ -482,7 +482,7 @@ class SocketClient:
             logger.debug(f'Sending: {list(message)}')
             self.writer.write(message)
             await self.writer.drain()
-            result = await asyncio.wait_for(self.reader.read(48), timeout=3)
+            result = await asyncio.wait_for(self.reader.read(48), timeout=1.5)
             logger.debug(f'Received: {list(result)}')
         except asyncio.TimeoutError as e:
             raise e
@@ -526,7 +526,6 @@ class HigoalApiClient:
         self._home_ids = None
         self._auth_command = None
         self._sign_in_time = None
-        self._devices = None
 
     async def connect(self):
         if not self.is_signed_in:
@@ -569,9 +568,6 @@ class HigoalApiClient:
         """
         if not self.is_signed_in:
             await self.sign_in()
-
-        if self._devices:
-            return self._devices
 
         devices = []
         for home in self._home_ids:
