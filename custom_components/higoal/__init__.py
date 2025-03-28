@@ -34,12 +34,17 @@ async def async_setup_entry(
         entry: HigoalConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
+
+    api = HigoalApiClient(
+        username=entry.data[CONF_USERNAME],
+        password=entry.data[CONF_PASSWORD],
+        session=async_get_clientsession(hass),
+    )
+    await api.connect()
+    await api.get_devices()
+
     entry.runtime_data = IntegrationData(
-        higoal_client=HigoalApiClient(
-            username=entry.data[CONF_USERNAME],
-            password=entry.data[CONF_PASSWORD],
-            session=async_get_clientsession(hass),
-        ),
+        higoal_client=api,
         integration=async_get_loaded_integration(hass, entry.domain)
     )
 

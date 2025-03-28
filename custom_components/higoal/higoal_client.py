@@ -526,6 +526,7 @@ class HigoalApiClient:
         self._home_ids = None
         self._auth_command = None
         self._sign_in_time = None
+        self._devices = None
 
     async def connect(self):
         if not self.is_signed_in:
@@ -569,6 +570,9 @@ class HigoalApiClient:
         if not self.is_signed_in:
             await self.sign_in()
 
+        if self._devices:
+            return self._devices
+
         devices = []
         for home in self._home_ids:
             payload = f"homeId={home}&token={self._token}&uid={self._user_id}"
@@ -583,7 +587,7 @@ class HigoalApiClient:
         if responses:
             for device, response in zip(devices, responses):
                 device.set_current_status_response(response)
-
+        self._devices = devices
         return devices
 
     async def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
