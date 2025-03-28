@@ -20,7 +20,7 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the switch platform."""
-    devices = await entry.runtime_data.coordinator.devices
+    devices = entry.runtime_data.coordinator.devices
     switches = []
 
     for device in devices:

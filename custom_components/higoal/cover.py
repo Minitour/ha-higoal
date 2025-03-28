@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
     """Set up the cover platform."""
-    devices = await entry.runtime_data.coordinator.devices
+    devices = entry.runtime_data.coordinator.devices
     covers = []
     for device in devices:
         for button in device.buttons:
