@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import LOGGER as _LOGGER
+from .const import LOGGER as logger
 
 
 class Coordinator(DataUpdateCoordinator):
@@ -21,7 +21,7 @@ class Coordinator(DataUpdateCoordinator):
         """Initialize my coordinator."""
         super().__init__(
             hass,
-            _LOGGER,
+            logger,
             # Name of the data. For logging purposes.
             name="Higoal Data Coordinator",
             config_entry=config_entry,
@@ -65,4 +65,5 @@ class Coordinator(DataUpdateCoordinator):
                         }
             return data
         except Exception as err:
+            logger.exception(err)
             raise UpdateFailed(f"Error communicating with API: {err}")
