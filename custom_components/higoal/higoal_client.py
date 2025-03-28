@@ -449,8 +449,8 @@ class Device:
         for button in self.buttons:
             button.response = response
 
+
 # mutex lock to avoid parallel writes to the socket.
-lock = asyncio.Lock()
 
 
 class SocketClient:
@@ -461,30 +461,45 @@ class SocketClient:
         self.port = port
         self.reader = None
         self.writer = None
+        self._lock = asyncio.Lock()
 
     async def connect(self):
-        reader, writer = await asyncio.open_connection(self.host, self.port)
-        self.reader = reader
-        self.writer = writer
+        await self._lock.acquire()
+        try:
+            reader, writer = await asyncio.open_connection(self.host, self.port)
+            self.reader = reader
+            self.writer = writer
+        except Exception:
+            pass
+        finally:
+            self._lock.release()
 
     async def write(self, message: bytes) -> bytes:
-        await lock.acquire()
+        await self._lock.acquire()
         try:
             if not self.writer:
                 await self.connect()
-
+            logger.debug(f'Sending: {list(message)}')
             self.writer.write(message)
             await self.writer.drain()
-            result = await self.reader.read(96)
+            result = await asyncio.wait_for(self.reader.read(48), timeout=3)
+            logger.debug(f'Received: {list(result)}')
+        except asyncio.TimeoutError as e:
+            raise e
         finally:
-            lock.release()
+            self._lock.release()
         return result
 
-    def close(self):
+    async def close(self):
+        await self._lock.acquire()
         try:
             self.writer.close()
+            self.writer = None
+            self.reader = None
         except Exception:
             pass
+        finally:
+            self._lock.release()
 
 
 class HigoalApiClient:
@@ -499,7 +514,7 @@ class HigoalApiClient:
             session: aiohttp.ClientSession = None,
     ):
         self._session = session
-        self.remote_socket = None
+        self.remote_socket = SocketClient(domain, 17670)
         self._username = username
         self._password = password
         self._version = version
@@ -512,11 +527,11 @@ class HigoalApiClient:
         self._auth_command = None
         self._sign_in_time = None
 
-    async def _init_socket(self):
-        if self.remote_socket:
-            self.remote_socket.close()
-
-        self.remote_socket = SocketClient(self._domain, 17670)
+    async def connect(self):
+        if not self.is_signed_in:
+            await self.sign_in()
+        logger.info('Connecting...')
+        await self.remote_socket.close()
         await self.remote_socket.connect()
         await self.remote_socket.write(self._auth_command)
         logger.info('Connected to remote socket')
@@ -546,7 +561,6 @@ class HigoalApiClient:
         self._sign_in_time = datetime.now(timezone.utc)
 
         self._auth_command = generate_auth_command(self._token)
-        await self._init_socket()
 
     async def get_devices(self) -> list[Device]:
         """
@@ -576,11 +590,7 @@ class HigoalApiClient:
         """
         Opens a socket, sends the command, waits for a response, and then closes the socket.
         """
-
         await self.refresh_connection_if_needed()
-
-        if not self.remote_socket:
-            await self._init_socket()
 
         if max_attempts == 0:
             return None
@@ -590,19 +600,19 @@ class HigoalApiClient:
             logger.debug(f'Got Response: {list(response)}')
             if len(response) < 48:
                 raise socket.error()
-        except (socket.gaierror, socket.timeout, ConnectionRefusedError, socket.error):
-            await self._init_socket()
+        except Exception:
+            await self.refresh_connection_if_needed(force=True)
             return await self.send_command(command, max_attempts - 1)
 
         return response
 
-    async def refresh_connection_if_needed(self):
+    async def refresh_connection_if_needed(self, force=False):
         now = datetime.now(timezone.utc)
-        if abs(now - self._sign_in_time) < timedelta(minutes=30):
+        if not force and abs(now - self._sign_in_time) < timedelta(minutes=30):
             return
 
         # session has been active for 30+ minutes, refresh it.
         self._user_id = None
         self._token = None
         self._home_ids = None
-        await self.sign_in()
+        await self.connect()

@@ -73,10 +73,12 @@ class HigoalCover(CoverEntity):
 
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
+        self._is_opening = True
         self.schedule_update_ha_state()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
+        self._is_closing= True
         self.schedule_update_ha_state()
 
     async def async_stop_cover(self, **kwargs):
