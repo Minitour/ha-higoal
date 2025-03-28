@@ -2,6 +2,6 @@
 import logging
 from logging import Logger, getLogger
 
-LOGGER: Logger = getLogger(__package__)
-LOGGER.setLevel(logging.DEBUG)
+logger: Logger = getLogger(__package__)
+logger.setLevel(logging.DEBUG)
 DOMAIN = "higoal"

@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .higoal_client import Entity
-
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):

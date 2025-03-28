@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 import aiohttp
 
-from .const import LOGGER as logger
+from .const import logger
 
 
 class ChecksumHandler:
@@ -227,7 +227,7 @@ def generate_command(
     checksum = bytes(ChecksumHandler.get_checksum(command, 2, 20))
     return bytes(command)[:-2] + checksum
 
-
+# Mappings from device type (int) to model name.
 models = {
     1: "8B",
     8: "8B",
@@ -266,14 +266,12 @@ models = {
 
 @dataclass
 class Entity:
-    """
-    Entity corresponds to a button/switch.
-    """
+    """Entity corresponds to a button/switch."""
     id: int
     name: str
     type: int
-    device: 'Device' = field(repr=False, metadata={"include_in_dict": True})
-    response: bytes = field(repr=False, default=None, metadata={"include_in_dict": True})
+    device: 'Device' = field(repr=False)
+    response: bytes = field(repr=False, default=None)
 
     def _get_on_action(self) -> int:
         action = 255
@@ -386,7 +384,7 @@ class Device:
     mac: str
     version: str
     buttons: list[Entity] = field(repr=False)
-    api: 'HigoalApiClient' = field(repr=False, metadata={"include_in_dict": True})
+    api: 'HigoalApiClient' = field(repr=False)
 
     @property
     def model_name(self):
@@ -454,7 +452,7 @@ class Device:
 
 
 class SocketClient:
-    """A client connecting to the async server via a basic socket."""
+    """A thread-safe client connecting to the async server via a basic socket."""
 
     def __init__(self, host: str, port: int):
         self.host = host
@@ -514,7 +512,7 @@ class HigoalApiClient:
             session: aiohttp.ClientSession = None,
     ):
         self._session = session
-        self.remote_socket = SocketClient(domain, 17670)
+        self._socket_client = SocketClient(domain, 17670)
         self._username = username
         self._password = password
         self._version = version
@@ -528,12 +526,13 @@ class HigoalApiClient:
         self._sign_in_time = None
 
     async def connect(self):
+        """Setup socket connection."""
         if not self.is_signed_in:
             await self.sign_in()
         logger.info('Connecting...')
-        await self.remote_socket.close()
-        await self.remote_socket.connect()
-        await self.remote_socket.write(self._auth_command)
+        await self._socket_client.close()
+        await self._socket_client.connect()
+        await self._socket_client.write(self._auth_command)
         logger.info('Connected to remote socket')
 
     @property
@@ -541,9 +540,7 @@ class HigoalApiClient:
         return self._user_id and self._token and self._home_ids
 
     async def sign_in(self):
-        """
-        Perform log-in with the provided credentials.
-        """
+        """Perform log-in with the provided credentials."""
         if self.is_signed_in:
             return
 
@@ -554,12 +551,9 @@ class HigoalApiClient:
         self._user_id = body.get('repData', {}).get('uid')
         self._token = body.get('repData', {}).get('token')
         self._home_ids = [home.get('id') for home in body.get('repData', {}).get('homeList', [])]
-
         if self._token is None:
             raise Exception('Log-in failed')
-
         self._sign_in_time = datetime.now(timezone.utc)
-
         self._auth_command = generate_auth_command(self._token)
 
     async def get_devices(self) -> list[Device]:
@@ -583,30 +577,36 @@ class HigoalApiClient:
         if responses:
             for device, response in zip(devices, responses):
                 device.set_current_status_response(response)
-        self._devices = devices
         return devices
 
     async def send_command(self, command: bytes, max_attempts=3) -> bytes | None:
         """
-        Opens a socket, sends the command, waits for a response, and then closes the socket.
+        Sends the command to the socket server. Automatically recovers from failures and retries up to 3 times.
         """
         await self.refresh_connection_if_needed()
 
         if max_attempts == 0:
+            logger.exception('Failed to send command after 3 attempts')
             return None
+
         logger.debug(f'Sending command: {list(command)}')
         try:
-            response = await self.remote_socket.write(command)
+            response = await self._socket_client.write(command)
             logger.debug(f'Got Response: {list(response)}')
             if len(response) < 48:
                 raise socket.error()
         except Exception:
+            # If the socket is not working refresh it.
+            logger.exception('Failed to send command. Retrying.')
             await self.refresh_connection_if_needed(force=True)
             return await self.send_command(command, max_attempts - 1)
 
         return response
 
     async def refresh_connection_if_needed(self, force=False):
+        """
+        Function used to refresh the token and socket connection.
+        """
         now = datetime.now(timezone.utc)
         if not force and abs(now - self._sign_in_time) < timedelta(minutes=30):
             return

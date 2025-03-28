@@ -14,7 +14,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, logger
 from .coordinator import Coordinator
 from .data import IntegrationData
 from .higoal_client import HigoalApiClient
@@ -43,7 +43,7 @@ async def async_setup_entry(
     )
     await api.connect()
 
-    data_coordinator = Coordinator(hass, entry, api, update_interval=timedelta(minutes=5))
+    data_coordinator = Coordinator(hass, entry, api, update_interval=timedelta(minutes=1))
     await data_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = IntegrationData(

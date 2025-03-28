@@ -10,7 +10,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
 
 from . import HigoalApiClient
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, logger
 
 
 class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -31,7 +31,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     password=user_input[CONF_PASSWORD],
                 )
             except Exception as e:
-                LOGGER.warning(e)
+                logger.warning(e)
                 _errors["base"] = "auth"
             else:
                 await self.async_set_unique_id(
@@ -76,4 +76,4 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             session=async_create_clientsession(self.hass)
         )
         await higoal_client.sign_in()
-        higoal_client.remote_socket.close()
+        higoal_client._socket_client.close()
