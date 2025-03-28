@@ -57,13 +57,13 @@ class HigoalSwitch(CoordinatorEntity, SwitchEntity):
         """Turn on the switch."""
         await self._entity.turn_on()
         self._state = await self._entity.is_turned_on()
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         await self._entity.turn_off()
         self._state = await self._entity.is_turned_on()
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:

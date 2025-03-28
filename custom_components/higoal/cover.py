@@ -69,19 +69,19 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
         self._is_opening = True
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
         self._is_closing = True
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         if self.is_closing:
             await self._close_button.turn_off()
         elif self.is_opening:
             await self._open_button.turn_off()
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:
