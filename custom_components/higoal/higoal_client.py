@@ -326,14 +326,14 @@ class Entity:
         Check if the switch is turned on or not.
         """
         response = await self._current_response(use_cache=use_cache)
-        return response[18 + self.id] == 255
+        return response[18 + self.id - 1] == 255
 
     async def is_online(self, use_cache: bool = True):
         """
         Check if the switch is online.
         """
         response = list(await self._current_response(use_cache=use_cache))
-        return response[18 + self.id] != 0
+        return response[18 + self.id - 1] != 0
 
     async def percentage(self, use_cache: bool = True) -> float | None:
         """
