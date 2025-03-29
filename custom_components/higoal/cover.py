@@ -70,11 +70,15 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
 
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
+        percentage = await self._open_button.percentage()
+        self._cover_position = self._calculate_position(percentage)
         self._is_opening = True
         self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
+        percentage = await self._open_button.percentage()
+        self._cover_position = self._calculate_position(percentage)
         self._is_closing = True
         self.async_write_ha_state()
 
@@ -88,13 +92,16 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
             percentage = await self._open_button.percentage()
 
         if percentage is not None:
-            value = int(percentage * 100)
-            self._cover_position = 100 - value
+            self._cover_position = self._calculate_position(percentage)
             self._is_closed = self._cover_position == 0
-            self._is_opening = False
-            self._is_closing = False
-            
+
         self.async_write_ha_state()
+
+    @staticmethod
+    def _calculate_position(percentage: float | None) -> int | None:
+        if percentage is None:
+            return None
+        return 100 - int(percentage * 100)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -104,9 +111,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
 
         self._open_button = open_data['entity']
         self._close_button = close_data['entity']
-
-        value = int(open_data['state']['percentage'] * 100)
-        self._cover_position = 100 - value
+        self._cover_position = self._calculate_position(open_data['state']['percentage'])
         self._is_closed = self._cover_position == 0
         self._is_opening = open_data['state']['is_turned_on']
         self._is_closing = close_data['state']['is_turned_on']
