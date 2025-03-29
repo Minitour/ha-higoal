@@ -229,6 +229,10 @@ def generate_command(
 
 
 def verify_response(command: bytes, response: bytes):
+    if response[4:9] == bytes([1, 1, 1, 1, 13]):
+        # device is offline
+        return True
+
     return all(
         [
             command[9:13] == response[9:13],
