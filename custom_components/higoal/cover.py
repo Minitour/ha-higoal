@@ -92,7 +92,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         close_data = self.coordinator.data.get(f'higoal:{self._close_button.device.id}:{self._close_button.id}')
 
         self._open_button = open_data['entity']
-        self._open_button = close_data['entity']
+        self._close_button = close_data['entity']
 
         value = int(open_data['state']['percentage'] * 100)
         self._cover_position = 100 - value
