@@ -70,30 +70,28 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
 
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
-        percentage = await self._open_button.percentage()
-        self._cover_position = self._calculate_position(percentage)
         self._is_opening = True
         self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         await self._close_button.turn_on()
-        percentage = await self._open_button.percentage()
-        self._cover_position = self._calculate_position(percentage)
         self._is_closing = True
         self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         percentage = None
-        if self.is_closing:
+        if self._is_closing:
             await self._close_button.turn_off()
-            percentage = await self._close_button.percentage()
-        elif self.is_opening:
+            percentage = await self._close_button.percentage(use_cache=False)
+        elif self._is_opening:
             await self._open_button.turn_off()
-            percentage = await self._open_button.percentage()
+            percentage = await self._open_button.percentage(use_cache=False)
 
         if percentage is not None:
             self._cover_position = self._calculate_position(percentage)
             self._is_closed = self._cover_position == 0
+            self._is_closing = False
+            self._is_opening = False
 
         self.async_write_ha_state()
 
