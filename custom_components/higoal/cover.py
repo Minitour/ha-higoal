@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from homeassistant.components.cover import CoverEntity, CoverDeviceClass
+from homeassistant.components.cover import CoverEntity, CoverDeviceClass, CoverEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -42,6 +42,12 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         self._is_closing = False
         self._is_opening = False
         self._is_available = True
+
+    @property
+    def supported_features(self) -> CoverEntityFeature:
+        return (
+                CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
+        )
 
     @property
     def device_class(self):
