@@ -47,11 +47,17 @@ class HigoalSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
         self._attr_name = entity.name or 'Higoal Switch'
         self._state = False
+        self._available = True
 
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
         return self._state
+
+    @property
+    def available(self):
+        """Return True if entity is available."""
+        return self._available
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
@@ -72,6 +78,7 @@ class HigoalSwitch(CoordinatorEntity, SwitchEntity):
         logger.debug('[%s] Updated data: %s', self._attr_unique_id, data)
         self._entity = data['entity']
         self._state = data['state']['is_turned_on']
+        self._available = data['state']['is_online']
         self.async_write_ha_state()
 
     @property

@@ -41,6 +41,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         self._cover_position = 0
         self._is_closing = False
         self._is_opening = False
+        self._is_available = True
 
     @property
     def device_class(self):
@@ -62,6 +63,10 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
     @property
     def is_opening(self) -> bool | None:
         return self._is_opening
+
+    @property
+    def is_available(self) -> bool:
+        return self._is_available
 
     async def async_open_cover(self, **kwargs):
         await self._open_button.turn_on()
@@ -94,6 +99,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         self._is_closed = self._cover_position == 0
         self._is_opening = open_data['state']['is_turned_on']
         self._is_closing = close_data['state']['is_turned_on']
+        self._available = open_data['state']['is_online']
         self.async_write_ha_state()
 
     @property
