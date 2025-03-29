@@ -90,6 +90,7 @@ class HigoalCover(CoordinatorEntity, CoverEntity):
         if percentage is not None:
             value = int(percentage * 100)
             self._cover_position = 100 - value
+            self._is_closed = self._cover_position == 0
             self._is_opening = False
             self._is_closing = False
             
