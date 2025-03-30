@@ -476,42 +476,78 @@ class SocketClient:
         self._lock = asyncio.Lock()
 
     async def connect(self):
-        await self._lock.acquire()
-        try:
-            reader, writer = await asyncio.open_connection(self.host, self.port)
-            self.reader = reader
-            self.writer = writer
-        except Exception:
-            pass
-        finally:
-            self._lock.release()
+        """Connect to the socket server in a safe manner that properly handles cancellation."""
+        async with self._lock:
+            try:
+                # Only create a new connection if not already connected
+                if self.reader is None or self.writer is None:
+                    reader, writer = await asyncio.open_connection(self.host, self.port)
+                    self.reader = reader
+                    self.writer = writer
+                    logger.debug(f"Connected to server at {self.host}:{self.port}")
+            except asyncio.CancelledError:
+                logger.debug("Connection attempt cancelled")
+                raise  # Re-raise cancellation to properly propagate it
+            except Exception as e:
+                logger.error(f"Failed to connect: {str(e)}")
+                # Clear any partial connection state
+                self.reader = None
+                self.writer = None
+                raise  # Re-raise to let caller handle the connection failure
 
     async def write(self, message: bytes) -> bytes:
-        await self._lock.acquire()
-        try:
-            if not self.writer:
-                await self.connect()
-            logger.debug(f'Sending: {list(message)}')
-            self.writer.write(message)
-            await self.writer.drain()
-            result = await asyncio.wait_for(self.reader.read(4096), timeout=1.5)
-            logger.debug(f'Received: {list(result)}')
-        except asyncio.TimeoutError as e:
-            raise e
-        finally:
-            self._lock.release()
-        return result
+        """Send a message and wait for a response with proper error handling."""
+        # Ensure we have a connection
+        if self.writer is None or self.reader is None:
+            await self.connect()
+
+        async with self._lock:
+            try:
+                # Send the message
+                logger.debug(f'Sending: {list(message)}')
+                self.writer.write(message)
+                await self.writer.drain()
+
+                # Wait for the response with timeout
+                result = await asyncio.wait_for(self.reader.read(4096), timeout=1.5)
+                logger.debug(f'Received: {list(result)}')
+                return result
+
+            except asyncio.TimeoutError:
+                logger.error("Timeout waiting for response")
+                raise
+            except asyncio.CancelledError:
+                logger.debug("Write operation cancelled")
+                raise  # Re-raise cancellation to properly propagate it
+            except Exception as e:
+                logger.error(f"Error during write operation: {str(e)}")
+                # If we encounter an error, consider the connection broken
+                await self._safe_close()
+                raise
 
     async def close(self):
-        await self._lock.acquire()
+        """Close the connection safely."""
+        async with self._lock:
+            await self._safe_close()
+
+    async def _safe_close(self):
+        """Internal method to safely close a connection without locking.
+        This method assumes the lock is already held or not needed."""
         try:
-            self.writer.close()
+            if self.writer is not None:
+                self.writer.close()
+                try:
+                    await self.writer.wait_closed()
+                except Exception:
+                    pass  # Ignore errors during wait_closed
+                self.writer = None
+            self.reader = None
+            logger.debug("Connection closed")
+        except Exception as e:
+            logger.error(f"Error during connection close: {str(e)}")
+            # Ensure resources are cleared even on error
             self.writer = None
             self.reader = None
-        except Exception:
-            pass
-        finally:
-            self._lock.release()
 
 
 class HigoalApiClient:
