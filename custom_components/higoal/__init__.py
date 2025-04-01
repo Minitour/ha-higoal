@@ -24,16 +24,13 @@ if TYPE_CHECKING:
 
     from .data import HigoalConfigEntry
 
-PLATFORMS: list[Platform] = [
-    Platform.SWITCH,
-    Platform.COVER
-]
+PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.COVER]
 
 
 # https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry
 async def async_setup_entry(
-        hass: HomeAssistant,
-        entry: HigoalConfigEntry,
+    hass: HomeAssistant,
+    entry: HigoalConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
     api = HigoalApiClient(
@@ -43,13 +40,15 @@ async def async_setup_entry(
     )
     await api.connect()
 
-    data_coordinator = Coordinator(hass, entry, api, update_interval=timedelta(minutes=1))
+    data_coordinator = Coordinator(
+        hass, entry, api, update_interval=timedelta(minutes=1)
+    )
     await data_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = IntegrationData(
-        higoal_client=api,
+        client=api,
         coordinator=data_coordinator,
-        integration=async_get_loaded_integration(hass, entry.domain)
+        integration=async_get_loaded_integration(hass, entry.domain),
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -59,16 +58,16 @@ async def async_setup_entry(
 
 
 async def async_unload_entry(
-        hass: HomeAssistant,
-        entry: HigoalConfigEntry,
+    hass: HomeAssistant,
+    entry: HigoalConfigEntry,
 ) -> bool:
     """Handle removal of an entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_reload_entry(
-        hass: HomeAssistant,
-        entry: HigoalConfigEntry,
+    hass: HomeAssistant,
+    entry: HigoalConfigEntry,
 ) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)

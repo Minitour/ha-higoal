@@ -1,8 +1,7 @@
 import asyncio
 import random
-import socket
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 
@@ -23,7 +22,12 @@ class ChecksumHandler:
     @staticmethod
     def compute_checksum(data, start_index, end_index, secret_byte):
         length = len(data) - 1
-        if start_index < 0 or start_index >= length or end_index > length or end_index <= start_index:
+        if (
+            start_index < 0
+            or start_index >= length
+            or end_index > length
+            or end_index <= start_index
+        ):
             return 0
         unsigned_byte = ChecksumHandler.convert_to_unsigned(secret_byte)
         checksum = 0
@@ -41,7 +45,7 @@ class ChecksumHandler:
     def get_checksum(data, start_index, end_index):
         return [
             ChecksumHandler.compute_checksum(data, start_index, end_index, 28),
-            ChecksumHandler.compute_checksum(data, start_index, end_index, 122)
+            ChecksumHandler.compute_checksum(data, start_index, end_index, 122),
         ]
 
 
@@ -89,8 +93,7 @@ class CharacterMapper:
     def parse_custom_encoded_string(input_str: str) -> int:
         try:
             return int(
-                input_str
-                .replace(CharacterMapper.D, CharacterMapper.NUM_0)
+                input_str.replace(CharacterMapper.D, CharacterMapper.NUM_0)
                 .replace(CharacterMapper.X, CharacterMapper.NUM_0)
                 .replace(CharacterMapper.O, CharacterMapper.NUM_0)
                 .replace(CharacterMapper.I, CharacterMapper.NUM_1)
@@ -133,7 +136,7 @@ def encode_token(token):
     # Iterate through the token in steps of 2 characters
     for i in range(0, 32, 2):
         # Convert each 2-character substring to a byte
-        byte_arr[i // 2] = int(token[i:i + 2], 16)
+        byte_arr[i // 2] = int(token[i : i + 2], 16)
 
     return bytes(byte_arr)
 
@@ -173,12 +176,12 @@ def generate_auth_command(token: str) -> bytes:
 
 
 def generate_command(
-        device_id: str,
-        device_type: int,
-        read_only: bool = True,
-        entity: int = None,
-        entity_type: int = None,
-        action: int = None
+    device_id: str,
+    device_type: int,
+    read_only: bool = True,
+    entity: int = None,
+    entity_type: int = None,
+    action: int = None,
 ) -> bytes:
     """
     This function builds a byte array to control the device. It can be used to either perform actions on the device
@@ -188,37 +191,35 @@ def generate_command(
 
     # Check for valid device ID and type
     if numeric_device_id <= 0 or device_type <= 0:
-        return b''
+        return b""
 
     # Convert device ID to little-endian bytes
-    device_id_bytes = numeric_device_id.to_bytes(4, byteorder='little')
+    device_id_bytes = numeric_device_id.to_bytes(4, byteorder="little")
 
     # Create the command array
-    command = bytearray([
-        0xAA,  # Start byte 1
-        0x5A,  # Start byte 2
-        0x01,  # Command parameters
-        0x01,
-        0x01,
-        0x02,
-        0x01,
-        0x01 if read_only else 0x02,
-        0x00,  # Padding
-
-        # Device ID bytes (little-endian)
-        device_id_bytes[0],
-        device_id_bytes[1],
-        device_id_bytes[2],
-        device_id_bytes[3],
-
-        0x00,  # Reserved/padding
-
-        # Device type byte
-        device_type & 0xFF,
-
-        # Remaining padding bytes
-        *([0x00] * 33)
-    ])
+    command = bytearray(
+        [
+            0xAA,  # Start byte 1
+            0x5A,  # Start byte 2
+            0x01,  # Command parameters
+            0x01,
+            0x01,
+            0x02,
+            0x01,
+            0x01 if read_only else 0x02,
+            0x00,  # Padding
+            # Device ID bytes (little-endian)
+            device_id_bytes[0],
+            device_id_bytes[1],
+            device_id_bytes[2],
+            device_id_bytes[3],
+            0x00,  # Reserved/padding
+            # Device type byte
+            device_type & 0xFF,
+            # Remaining padding bytes
+            *([0x00] * 33),
+        ]
+    )
     if not read_only:
         command[18 + entity] = action
         if entity_type == 3:
@@ -233,12 +234,7 @@ def verify_response(command: bytes, response: bytes):
         # device is offline
         return True
 
-    return all(
-        [
-            command[9:13] == response[9:13],
-            command[14] == response[14]
-        ]
-    )
+    return all([command[9:13] == response[9:13], command[14] == response[14]])
 
 
 # Mappings from device type (int) to model name.
@@ -274,22 +270,23 @@ models = {
     12: "IR",
     22: "IR",
     31: "PIMA",
-    160: "C4"
+    160: "C4",
 }
 
 
 @dataclass
 class Entity:
     """Entity corresponds to a button/switch."""
+
     id: int
     name: str
     type: int
-    device: 'Device' = field(repr=False)
+    device: "Device" = field(repr=False)
     response: bytes = field(repr=False, default=None)
 
     def _get_on_action(self) -> int:
         action = 255
-        if self.type == 3 and self.name == '':
+        if self.type == 3 and self.name == "":
             action = 240
         return action
 
@@ -309,7 +306,7 @@ class Entity:
             read_only=False,
             entity=self.id,
             entity_type=self.type,
-            action=action
+            action=action,
         )
         self.response = await self.device.api.send_command(cmd)
 
@@ -328,7 +325,7 @@ class Entity:
             read_only=False,
             entity=self.id,
             entity_type=self.type,
-            action=action
+            action=action,
         )
         self.response = await self.device.api.send_command(cmd)
 
@@ -362,15 +359,13 @@ class Entity:
     async def _current_response(self, use_cache: bool = True) -> bytes:
         if use_cache and self.response and len(self.response) >= 48:
             return self.response
-        self.response = await self.device.api.send_command(
-            self.status_command()
-        )
+        self.response = await self.device.api.send_command(self.status_command())
         return self.response
 
-    def get_related_entity(self) -> 'Entity':
+    def get_related_entity(self) -> "Entity":
         if self.type != 3:
             return None
-        if self.name == '':
+        if self.name == "":
             return None
         index = 0
         for index, button in enumerate(self.device.buttons):
@@ -389,6 +384,7 @@ class Device:
     """
     A device (or sometimes host) refers to a physical switch
     """
+
     id: str
     type: int
     name: str
@@ -398,43 +394,38 @@ class Device:
     mac: str
     version: str
     buttons: list[Entity] = field(repr=False)
-    api: 'HigoalApiClient' = field(repr=False)
+    api: "HigoalApiClient" = field(repr=False)
 
     @property
     def model_name(self):
-        return models.get(self.type) or 'UNKNOWN'
+        return models.get(self.type) or "UNKNOWN"
 
     @classmethod
-    def init_from(cls, device: dict, api: 'HigoalApiClient') -> 'Device':
+    def init_from(cls, device: dict, api: "HigoalApiClient") -> "Device":
         """
         Create an instance of device from dictionary object and api client.
         """
-        button_names = device.get('buttonName').split(';')
-        button_types = device.get('buttonType').split(',')
+        button_names = device.get("buttonName").split(";")
+        button_types = device.get("buttonType").split(",")
         buttons = []
         device = Device(
-            id=device.get('id'),
-            type=device.get('type'),
-            name=device.get('name'),
-            room_id=device.get('roomId'),
-            home_id=device.get('homeId'),
-            ssid=device.get('ssid'),
-            mac=device.get('mac'),
-            version=device.get('version'),
+            id=device.get("id"),
+            type=device.get("type"),
+            name=device.get("name"),
+            room_id=device.get("roomId"),
+            home_id=device.get("homeId"),
+            ssid=device.get("ssid"),
+            mac=device.get("mac"),
+            version=device.get("version"),
             buttons=buttons,
-            api=api
+            api=api,
         )
-        for i, (button_name, button_type) in enumerate(zip(button_names, button_types)):
+        for i, (button_name, button_type) in enumerate(zip(button_names, button_types, strict=False)):
             button_type = int(button_type)
             if button_type == 0:
                 continue
             buttons.append(
-                Entity(
-                    id=i,
-                    name=button_name,
-                    type=button_type,
-                    device=device
-                )
+                Entity(id=i, name=button_name, type=button_type, device=device)
             )
 
         return device
@@ -444,9 +435,7 @@ class Device:
         Generates the status command.
         """
         return generate_command(
-            device_id=self.id,
-            device_type=self.type,
-            read_only=True
+            device_id=self.id, device_type=self.type, read_only=True
         )
 
     def button(self, name: str) -> Entity | None:
@@ -489,7 +478,7 @@ class SocketClient:
                 logger.debug("Connection attempt cancelled")
                 raise  # Re-raise cancellation to properly propagate it
             except Exception as e:
-                logger.error(f"Failed to connect: {str(e)}")
+                logger.error(f"Failed to connect: {e!s}")
                 # Clear any partial connection state
                 self.reader = None
                 self.writer = None
@@ -504,23 +493,21 @@ class SocketClient:
         async with self._lock:
             try:
                 # Send the message
-                logger.debug(f'Sending: {list(message)}')
                 self.writer.write(message)
                 await self.writer.drain()
 
                 # Wait for the response with timeout
                 result = await asyncio.wait_for(self.reader.read(4096), timeout=1.5)
-                logger.debug(f'Received: {list(result)}')
                 return result
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("Timeout waiting for response")
                 raise
             except asyncio.CancelledError:
                 logger.debug("Write operation cancelled")
                 raise  # Re-raise cancellation to properly propagate it
             except Exception as e:
-                logger.error(f"Error during write operation: {str(e)}")
+                logger.error(f"Error during write operation: {e!s}")
                 # If we encounter an error, consider the connection broken
                 await self._safe_close()
                 raise
@@ -531,8 +518,10 @@ class SocketClient:
             await self._safe_close()
 
     async def _safe_close(self):
-        """Internal method to safely close a connection without locking.
-        This method assumes the lock is already held or not needed."""
+        """
+        Internal method to safely close a connection without locking.
+        This method assumes the lock is already held or not needed.
+        """
         try:
             if self.writer is not None:
                 self.writer.close()
@@ -542,24 +531,22 @@ class SocketClient:
                     pass  # Ignore errors during wait_closed
                 self.writer = None
             self.reader = None
-            logger.debug("Connection closed")
         except Exception as e:
-            logger.error(f"Error during connection close: {str(e)}")
+            logger.error(f"Error during connection close: {e!s}")
             # Ensure resources are cleared even on error
             self.writer = None
             self.reader = None
 
 
 class HigoalApiClient:
-
     def __init__(
-            self,
-            domain: str = 'server.higoal.net',
-            port: int = 8143,
-            version: str = 'V3.21.1',
-            username: str = None,
-            password: str = None,
-            session: aiohttp.ClientSession = None,
+        self,
+        domain: str = "server.higoal.net",
+        port: int = 8143,
+        version: str = "V3.21.1",
+        username: str = None,
+        password: str = None,
+        session: aiohttp.ClientSession = None,
     ):
         self._session = session
         self._socket_client = SocketClient(domain, 17670)
@@ -568,7 +555,7 @@ class HigoalApiClient:
         self._version = version
         self._domain = domain
         self._port = port
-        self._url = f'https://{domain}:{port}'
+        self._url = f"https://{domain}:{port}"
         self._user_id = None
         self._token = None
         self._home_ids = None
@@ -579,11 +566,11 @@ class HigoalApiClient:
         """Setup socket connection."""
         if not self.is_signed_in:
             await self.sign_in()
-        logger.info('Connecting...')
+        logger.info("Connecting...")
         await self._socket_client.close()
         await self._socket_client.connect()
         await self._socket_client.write(self._auth_command)
-        logger.info('Connected to remote socket')
+        logger.info("Connected to remote socket")
 
     @property
     def is_signed_in(self):
@@ -594,16 +581,22 @@ class HigoalApiClient:
         if self.is_signed_in:
             return
 
-        payload = f"password={self._password}&username={self._username}&ver={self._version}"
-        headers = {'content-type': "application/x-www-form-urlencoded; charset=utf-8"}
-        response = await self._session.request("POST", f'{self._url}/login', data=payload, headers=headers)
+        payload = (
+            f"password={self._password}&username={self._username}&ver={self._version}"
+        )
+        headers = {"content-type": "application/x-www-form-urlencoded; charset=utf-8"}
+        response = await self._session.request(
+            "POST", f"{self._url}/login", data=payload, headers=headers
+        )
         body = await response.json()
-        self._user_id = body.get('repData', {}).get('uid')
-        self._token = body.get('repData', {}).get('token')
-        self._home_ids = [home.get('id') for home in body.get('repData', {}).get('homeList', [])]
+        self._user_id = body.get("repData", {}).get("uid")
+        self._token = body.get("repData", {}).get("token")
+        self._home_ids = [
+            home.get("id") for home in body.get("repData", {}).get("homeList", [])
+        ]
         if self._token is None:
-            raise Exception('Log-in failed')
-        self._sign_in_time = datetime.now(timezone.utc)
+            raise Exception("Log-in failed")
+        self._sign_in_time = datetime.now(UTC)
         self._auth_command = generate_auth_command(self._token)
 
     async def get_devices(self) -> list[Device]:
@@ -616,10 +609,14 @@ class HigoalApiClient:
         devices = []
         for home in self._home_ids:
             payload = f"homeId={home}&token={self._token}&uid={self._user_id}"
-            headers = {'content-type': "application/x-www-form-urlencoded; charset=utf-8"}
-            response = await self._session.request("POST", f'{self._url}/get_host_list', data=payload, headers=headers)
+            headers = {
+                "content-type": "application/x-www-form-urlencoded; charset=utf-8"
+            }
+            response = await self._session.request(
+                "POST", f"{self._url}/get_host_list", data=payload, headers=headers
+            )
             body = await response.json()
-            devices.extend(body.get('repData', []))
+            devices.extend(body.get("repData", []))
         devices = [Device.init_from(device, self) for device in devices]
 
         for device in devices:
@@ -637,17 +634,17 @@ class HigoalApiClient:
         await self.refresh_connection_if_needed()
 
         if max_attempts == 0:
-            logger.error('Failed to send command after 3 attempts')
+            logger.error("Failed to send command after 3 attempts")
             return None
         try:
             response = await self._socket_client.write(command)
             if len(response) < 48:
-                raise socket.error()
+                raise OSError
             if not verify_response(command, response):
-                raise Exception('Received response for a different command')
+                raise Exception("Received response for a different command")
         except Exception as e:
             # If the socket is not working refresh it.
-            logger.info(f'Failed to send command ({e}). Retrying.')
+            logger.info(f"Failed to send command ({e}). Retrying.")
             await self.refresh_connection_if_needed(force=True)
             return await self.send_command(command, max_attempts - 1)
 
@@ -657,7 +654,7 @@ class HigoalApiClient:
         """
         Function used to refresh the token and socket connection.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if not force and abs(now - self._sign_in_time) < timedelta(minutes=30):
             return
 

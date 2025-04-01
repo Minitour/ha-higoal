@@ -73,7 +73,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         higoal_client = HigoalApiClient(
             username=username,
             password=password,
-            session=async_create_clientsession(self.hass)
+            session=async_create_clientsession(self.hass),
         )
         await higoal_client.sign_in()
         higoal_client._socket_client.close()

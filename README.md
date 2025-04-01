@@ -23,6 +23,10 @@ Unofficial integration, use at your own risk!
 2. `Password` - Your Higoal account password.
 
 ## Features
+The integration defines a custom [DataUpdateCoordinator](https://developers.home-assistant.io/docs/integration_fetching_data/#coordinated-single-api-poll-for-data-for-all-entities) which pulls all the devices' information in the specified account every 60 seconds.
+ This is done using both HTTPs requests and a TCP socket. Any follow-up interaction that is done with the devices/entities is done via the socket connection.
+In some cases the socket connection may be lost, however the integration is able to automatically recover.
+
 ### Supported Entities
 - **Switch**: Control supported Higoal switches.
 - **Cover**: Open and close supported Higoal covers.
@@ -35,6 +39,7 @@ Unofficial integration, use at your own risk!
 ## Notes
 - This integration has been tested with the models listed above but may work with others.
 - Use at your own risk, as this is an unofficial integration.
+- Using the same credentials as in the app can result in interferences. Therefore, it is recommended to create an additional user and add it to your home and use its credentials instead.
 
 ## Repository
 [GitHub - ha-higoal](https://github.com/Minitour/ha-higoal)

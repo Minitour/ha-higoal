@@ -18,6 +18,7 @@ type HigoalConfigEntry = ConfigEntry[IntegrationData]
 @dataclass
 class IntegrationData:
     """Data for the Blueprint integration."""
-    higoal_client: HigoalApiClient
+
+    client: HigoalApiClient
     coordinator: Coordinator
     integration: Integration

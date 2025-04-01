@@ -9,15 +9,15 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, logger
+from .const import DOMAIN
 from .data import HigoalConfigEntry
 from .higoal_client import Entity
 
 
 async def async_setup_entry(
-        hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
-        entry: HigoalConfigEntry,
-        async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    entry: HigoalConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the switch platform."""
     devices = entry.runtime_data.coordinator.devices
@@ -36,16 +36,12 @@ async def async_setup_entry(
 class HigoalSwitch(CoordinatorEntity, SwitchEntity):
     """higoal switch class."""
 
-    def __init__(
-            self,
-            coordinator,
-            entity: Entity
-    ) -> None:
+    def __init__(self, coordinator, entity: Entity) -> None:
         super().__init__(coordinator)
         """Initialize the switch class."""
         self._entity = entity
         self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
-        self._attr_name = entity.name or 'Higoal Switch'
+        self._attr_name = entity.name or "Higoal Switch"
         self._state = False
         self._available = True
 
@@ -75,10 +71,9 @@ class HigoalSwitch(CoordinatorEntity, SwitchEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         data = self.coordinator.data.get(self._attr_unique_id)
-        logger.debug('[%s] Updated data: %s', self._attr_unique_id, data)
-        self._entity = data['entity']
-        self._state = data['state']['is_turned_on']
-        self._available = data['state']['is_online']
+        self._entity = data["entity"]
+        self._state = data["state"]["is_turned_on"]
+        self._available = data["state"]["is_online"]
         self.async_write_ha_state()
 
     @property
