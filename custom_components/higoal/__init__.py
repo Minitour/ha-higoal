@@ -40,7 +40,7 @@ async def async_setup_entry(
     )
     await api.connect()
 
-    time_seconds = entry.data[ATTR_SECONDS]
+    time_seconds = entry.data.get(ATTR_SECONDS, 30)
 
     data_coordinator = Coordinator(
         hass, entry, api, update_interval=timedelta(seconds=time_seconds)
