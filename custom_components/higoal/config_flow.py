@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, ATTR_SECONDS
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
@@ -19,8 +19,8 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(
-        self,
-        user_input: dict | None = None,
+            self,
+            user_input: dict | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Handle a flow initialized by the user."""
         _errors = {}
@@ -63,6 +63,13 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             type=selector.TextSelectorType.PASSWORD,
                         ),
                     ),
+                    vol.Required(ATTR_SECONDS, msg='Refresh Interval', default=30,
+                                 description='Refresh Interval in seconds. It is recommended to keep this at 30~60 secondsi if you have many devices.'): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1,
+                            max=120
+                        )
+                    )
                 },
             ),
             errors=_errors,

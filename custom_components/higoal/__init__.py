@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform, ATTR_SECONDS
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
@@ -40,8 +40,10 @@ async def async_setup_entry(
     )
     await api.connect()
 
+    time_seconds = entry.data[ATTR_SECONDS]
+
     data_coordinator = Coordinator(
-        hass, entry, api, update_interval=timedelta(minutes=1)
+        hass, entry, api, update_interval=timedelta(seconds=time_seconds)
     )
     await data_coordinator.async_config_entry_first_refresh()
 
