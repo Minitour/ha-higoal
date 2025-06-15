@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from .data import HigoalConfigEntry
 
-PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.COVER]
+PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.LIGHT, Platform.COVER]
 
 
 # https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry

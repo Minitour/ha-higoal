@@ -329,6 +329,26 @@ class Entity:
         )
         self.response = await self.device.api.send_command(cmd)
 
+    async def set_percentage(self, percentage: int):
+        if self.type != 2:
+            return
+        value = max(0, min(100, percentage))
+        action = 241
+        cmd = generate_command(
+            device_id=self.device.id,
+            device_type=self.device.type,
+            read_only=False,
+            entity=self.id,
+            entity_type=self.type,
+            action=action,
+        )
+        cmd = list(cmd)
+        cmd[18 + self.id + 19] = value
+        self.response = await self.device.api.send_command(bytes(cmd))
+
+    def can_set_percentage(self) -> bool:
+        return self.type == 2
+
     def status_command(self):
         return self.device.status_command()
 
@@ -350,10 +370,10 @@ class Entity:
         """
         Get percentage of blinds 1.0 means fully closed while 0.0 means fully open.
         """
-        if self.type != 3:
+        if self.type != 3 or self.type != 2:
             return None
         status = list(await self._current_response(use_cache=use_cache))
-        value = max(min(status[-10], 100), 0)
+        value = max(min(status[18 + self.id + 19], 100), 0)
         return value / 100
 
     async def _current_response(self, use_cache: bool = True) -> bytes:
