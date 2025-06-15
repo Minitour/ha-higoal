@@ -329,10 +329,10 @@ class Entity:
         )
         self.response = await self.device.api.send_command(cmd)
 
-    async def set_percentage(self, percentage: int):
+    async def set_percentage(self, percentage: float):
         if self.type != 2:
             return
-        value = max(0, min(100, percentage))
+        value = max(0, min(100, int(percentage * 100)))
         action = 241
         cmd = generate_command(
             device_id=self.device.id,

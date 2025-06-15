@@ -71,12 +71,12 @@ class HigoalLight(CoordinatorEntity, LightEntity):
         """Turn the light on with optional brightness."""
         if ATTR_BRIGHTNESS in kwargs:
             self._brightness = kwargs[ATTR_BRIGHTNESS]
-            await self._entity.set_percentage(int(self._brightness / 255 * 100))
+            await self._entity.set_percentage(int(self._brightness / 255))
         else:
             await self._entity.turn_on()
 
         self._is_on = await self._entity.is_turned_on()
-        self._brightness = int((await self._entity.percentage() / 100) * 255)
+        self._brightness = int(await self._entity.percentage() * 255)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **_: Any) -> None:
@@ -91,7 +91,7 @@ class HigoalLight(CoordinatorEntity, LightEntity):
         data = self.coordinator.data.get(self._attr_unique_id)
         self._entity = data["entity"]
         self._is_on = data["state"]["is_turned_on"]
-        self._brightness = int(data["state"].get("percentage", 100) / 100 * 255)
+        self._brightness = int(data["state"].get("percentage") * 255)
         self._available = data["state"]["is_online"]
         self.async_write_ha_state()
 
