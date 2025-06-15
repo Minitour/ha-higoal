@@ -370,7 +370,7 @@ class Entity:
         """
         Get percentage of blinds 1.0 means fully closed while 0.0 means fully open.
         """
-        if self.type != 3 or self.type != 2:
+        if self.type not in {3, 2}:
             return None
         status = list(await self._current_response(use_cache=use_cache))
         value = max(min(status[18 + self.id + 19], 100), 0)
