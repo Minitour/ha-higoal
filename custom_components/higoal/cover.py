@@ -12,7 +12,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .client import device
-from .const import DOMAIN
 from .const import HIGOAL_DISCOVERY_NEW
 from .data import HigoalConfigEntry
 from .entity import BaseHigoalEntity
@@ -34,7 +33,10 @@ async def async_setup_entry(
             for entity in higoal_device.entities:
                 if entity.type != device.TYPE_SHUTTER:
                     continue
-                entities.append(entity)
+                if entity.name == "":
+                    continue
+
+                entities.append(HigoalCover(entity, entity.get_related_entity()))
 
         async_add_entities(entities)
 
@@ -52,10 +54,6 @@ class HigoalCover(BaseHigoalEntity, CoverEntity):
         super().__init__(open_button)
         self._open_button = open_button
         self._close_button = close_button
-        self._is_closed = False
-        self._cover_position = 0
-        self._is_closing = False
-        self._is_opening = False
 
     @property
     def supported_features(self) -> CoverEntityFeature:
@@ -88,11 +86,9 @@ class HigoalCover(BaseHigoalEntity, CoverEntity):
 
     def open_cover(self, **kwargs: Any) -> None:
         self._open_button.turn_on()
-        self._is_opening = True
 
     def close_cover(self, **kwargs: Any) -> None:
         self._close_button.turn_on()
-        self._is_closing = True
 
     def stop_cover(self, **kwargs: Any) -> None:
         if self.is_closing:

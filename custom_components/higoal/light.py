@@ -31,7 +31,7 @@ async def async_setup_entry(
             for entity in higoal_device.entities:
                 if entity.type != device.TYPE_DIMMER:
                     continue
-                entities.append(entity)
+                entities.append(HigoalLight(entity))
 
         async_add_entities(entities)
 

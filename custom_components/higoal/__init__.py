@@ -13,15 +13,14 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import dispatcher_send
 
-from .client.device import Entity
+from .client.device import Entity, Device
 from .client.manager import Manager, EntityListener
-from .const import DOMAIN, logger, HIGOAL_HA_SIGNAL_UPDATE_ENTITY
+from .const import DOMAIN, logger, HIGOAL_HA_SIGNAL_UPDATE_ENTITY, HIGOAL_DISCOVERY_NEW
 from .data import IntegrationData
 
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
-    from .data import HigoalConfigEntry
+from .data import HigoalConfigEntry
 
 PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.LIGHT, Platform.COVER]
 
@@ -37,6 +36,25 @@ class HomeAssistantEntityListener(EntityListener):
             f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{entity.device.id}_{entity.id}",
             [],
         )
+
+    def on_device_added(self, device: Device):
+        self.hass.add_job(self.async_remove_device, device.id)
+
+        dispatcher_send(self.hass, HIGOAL_DISCOVERY_NEW, [device.identifier])
+
+    def on_device_removed(self, device: Device) -> None:
+        """Add device removed listener."""
+        self.hass.add_job(self.async_remove_device, device.id)
+
+    @callback
+    def async_remove_device(self, device_id: str) -> None:
+        """Remove device from Home Assistant."""
+        device_registry = dr.async_get(self.hass)
+        device_entry = device_registry.async_get_device(
+            identifiers={(DOMAIN, device_id)}
+        )
+        if device_entry is not None:
+            device_registry.async_remove_device(device_entry.id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HigoalConfigEntry) -> bool:

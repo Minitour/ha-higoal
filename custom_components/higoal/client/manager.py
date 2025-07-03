@@ -15,6 +15,14 @@ class EntityListener(abc.ABC):
         """Called when an entity is changed."""
         pass
 
+    @abc.abstractmethod
+    def on_device_added(self, device: 'Device'):
+        pass
+
+    @abc.abstractmethod
+    def on_device_removed(self, device: 'Device'):
+        pass
+
 
 class Manager(MessageHandler):
     def __init__(self,
@@ -35,7 +43,25 @@ class Manager(MessageHandler):
     def get_devices(self):
         self.api.sign_in()
         devices = self.device_repository.get_devices()
-        self.device_map = {device.identifier: device for device in devices}
+        full_set = {device.identifier: device for device in devices}
+
+        new_devices = []
+        deleted_devices = []
+        for device in full_set.values():
+            if device.identifier in self.device_map:
+                continue
+            self.device_map[device.identifier] = device
+            new_devices.append(device)
+
+        for device in self.device_map:
+            if device not in full_set:
+                # device has been removed
+                deleted_devices.append(device)
+
+        for device in deleted_devices:
+            del self.device_map[device.identifier]
+
+        return new_devices, deleted_devices
 
     def refresh(self):
         if self.mq is not None:
@@ -61,8 +87,18 @@ class Manager(MessageHandler):
         device = self.device_map.get(device_byte_id)
 
         if device is None:
-            # TODO: Got update on a device which we don't have. Consider updating the device map
+            # Got update on a device which we don't have.
             # This could indicate a new device being added.
+            new_devices, deleted_devices = self.get_devices()
+            for device in new_devices:
+                self.entity_listener.on_device_added(device)
+            for device in deleted_devices:
+                self.entity_listener.on_device_removed(device)
+
+            if new_devices:
+                # try again
+                return self.on_receive(message)
+            # do nothing
             return
 
         # remove checksum info

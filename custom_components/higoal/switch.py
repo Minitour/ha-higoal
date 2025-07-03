@@ -31,7 +31,7 @@ async def async_setup_entry(
             for entity in higoal_device.entities:
                 if entity.type != device.TYPE_SWITCH:
                     continue
-                entities.append(entity)
+                entities.append(HigoalSwitch(entity))
 
         async_add_entities(entities)
 
