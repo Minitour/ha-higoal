@@ -7,17 +7,16 @@ https://github.com/ludeeus/integration_blueprint
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform, ATTR_SECONDS
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.loader import async_get_loaded_integration
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.dispatcher import dispatcher_send
 
-from .const import DOMAIN, logger
-from .coordinator import Coordinator
+from .client.device import Entity
+from .client.manager import Manager, EntityListener
+from .const import DOMAIN, logger, HIGOAL_HA_SIGNAL_UPDATE_ENTITY
 from .data import IntegrationData
-from .higoal_client import HigoalApiClient
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -27,49 +26,69 @@ if TYPE_CHECKING:
 PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.LIGHT, Platform.COVER]
 
 
-# https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: HigoalConfigEntry,
-) -> bool:
-    """Set up this integration using UI."""
-    api = HigoalApiClient(
+class HomeAssistantEntityListener(EntityListener):
+
+    def __init__(self, hass: HomeAssistant):
+        self.hass = hass
+
+    def on_entity_changed(self, entity: Entity):
+        dispatcher_send(
+            self.hass,
+            f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{entity.device.id}_{entity.id}",
+            [],
+        )
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: HigoalConfigEntry) -> bool:
+    """Async setup hass config entry."""
+
+    device_listener = HomeAssistantEntityListener(hass)
+    manager = Manager(
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
-        session=async_get_clientsession(hass),
-    )
-    await api.connect()
-
-    time_seconds = entry.data.get(ATTR_SECONDS, 30)
-
-    data_coordinator = Coordinator(
-        hass, entry, api, update_interval=timedelta(seconds=time_seconds)
-    )
-    await data_coordinator.async_config_entry_first_refresh()
-
-    entry.runtime_data = IntegrationData(
-        client=api,
-        coordinator=data_coordinator,
-        integration=async_get_loaded_integration(hass, entry.domain),
+        entity_listener=device_listener
     )
 
+    # Get all devices
+    await hass.async_add_executor_job(manager.get_devices)
+
+    # Connection is successful, store the manager & listener
+    entry.runtime_data = IntegrationData(manager=manager, listener=device_listener)
+
+    device_registry = dr.async_get(hass)
+    for device in manager.device_map.values():
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, device.id)},
+            manufacturer="HIGOAL",
+            name=device.name,
+            model=device.model,
+            sw_version=device.version
+        )
+
+    # Notify platforms of setup
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    # start background listener
+    await hass.async_add_executor_job(manager.refresh)
     return True
 
 
 async def async_unload_entry(
-    hass: HomeAssistant,
-    entry: HigoalConfigEntry,
+        hass: HomeAssistant,
+        entry: HigoalConfigEntry,
 ) -> bool:
     """Handle removal of an entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        runtime_data = entry.runtime_data
+        if runtime_data.manager.mq is not None:
+            runtime_data.manager.mq.stop()
+    return unload_ok
 
 
 async def async_reload_entry(
-    hass: HomeAssistant,
-    entry: HigoalConfigEntry,
+        hass: HomeAssistant,
+        entry: HigoalConfigEntry,
 ) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
