@@ -80,7 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HigoalConfigEntry) -> bo
             identifiers={(DOMAIN, device.id)},
             manufacturer="HIGOAL",
             name=device.name,
-            model=device.model,
+            model=device.model_name,
             sw_version=device.version
         )
 
