@@ -114,4 +114,6 @@ class Manager(MessageHandler):
             self.entity_listener.on_entity_changed(entity)
 
     def send_command(self, data: bytes):
+        if not self.mq:
+            return
         self.mq.send_message(Message(data))
