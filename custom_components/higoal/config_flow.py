@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, ATTR_SECONDS
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
 
-from . import HigoalApiClient
+from .client.api import Api
 from .const import DOMAIN, logger
 
 
@@ -26,7 +25,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         _errors = {}
         if user_input is not None:
             try:
-                await self._test_credentials(
+                self._test_credentials(
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                 )
@@ -35,9 +34,6 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 _errors["base"] = "auth"
             else:
                 await self.async_set_unique_id(
-                    ## Do NOT use this in production code
-                    ## The unique_id should never be something that can change
-                    ## https://developers.home-assistant.io/docs/config_entries_config_flow_handler#unique-ids
                     unique_id=slugify(user_input[CONF_USERNAME])
                 )
                 self._abort_if_unique_id_configured()
@@ -62,25 +58,13 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.TextSelectorConfig(
                             type=selector.TextSelectorType.PASSWORD,
                         ),
-                    ),
-                    vol.Required(ATTR_SECONDS, msg='Refresh Interval', default=30,
-                                 description='Refresh Interval in seconds. It is recommended to keep this at 30~60 secondsi if you have many devices.'): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1,
-                            max=120
-                        )
                     )
                 },
             ),
             errors=_errors,
         )
 
-    async def _test_credentials(self, username: str, password: str) -> None:
+    def _test_credentials(self, username: str, password: str) -> None:
         """Validate credentials."""
-        higoal_client = HigoalApiClient(
-            username=username,
-            password=password,
-            session=async_create_clientsession(self.hass),
-        )
-        await higoal_client.sign_in()
-        higoal_client._socket_client.close()
+        api = Api(username=username, password=password)
+        api.sign_in()

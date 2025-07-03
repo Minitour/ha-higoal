@@ -6,82 +6,52 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
+from .client import device
+from .const import HIGOAL_DISCOVERY_NEW
 from .data import HigoalConfigEntry
-from .higoal_client import Entity
+from .entity import BaseHigoalEntity
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
-    entry: HigoalConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+        hass: HomeAssistant,
+        entry: HigoalConfigEntry,
+        async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the switch platform."""
-    devices = entry.runtime_data.coordinator.devices
-    switches = []
+    hass_data = entry.runtime_data
 
-    for device in devices:
-        for button in device.buttons:
-            if button.type != 1:
-                continue
+    @callback
+    def async_discover_device(device_ids: list[str]) -> None:
+        """Discover and add a discovered sensor."""
+        entities: list[HigoalSwitch] = []
+        for device_id in device_ids:
+            higoal_device = hass_data.manager.device_map[device_id]
+            for entity in higoal_device.entities:
+                if entity.type != device.TYPE_SWITCH:
+                    continue
+                entities.append(HigoalSwitch(entity))
 
-            switches.append(HigoalSwitch(entry.runtime_data.coordinator, button))
+        async_add_entities(entities)
 
-    async_add_entities(switches, True)
+    async_discover_device([*hass_data.manager.device_map])
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, HIGOAL_DISCOVERY_NEW, async_discover_device)
+    )
 
 
-class HigoalSwitch(CoordinatorEntity, SwitchEntity):
+class HigoalSwitch(BaseHigoalEntity, SwitchEntity):
     """higoal switch class."""
-
-    def __init__(self, coordinator, entity: Entity) -> None:
-        super().__init__(coordinator)
-        """Initialize the switch class."""
-        self._entity = entity
-        self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
-        self._attr_name = entity.name or "Higoal Switch"
-        self._state = False
-        self._available = True
 
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
-        return self._state
+        return self.entity.is_turned_on()
 
-    @property
-    def available(self):
-        """Return True if entity is available."""
-        return self._available
+    def turn_on(self, **kwargs: Any) -> None:
+        self.entity.turn_on()
 
-    async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        await self._entity.turn_on()
-        self._state = await self._entity.is_turned_on()
-        self.async_write_ha_state()
-
-    async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        await self._entity.turn_off()
-        self._state = await self._entity.is_turned_on()
-        self.async_write_ha_state()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        data = self.coordinator.data.get(self._attr_unique_id)
-        self._entity = data["entity"]
-        self._state = data["state"]["is_turned_on"]
-        self._available = data["state"]["is_online"]
-        self.async_write_ha_state()
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._entity.device.id)},  # Same ID as the cover
-            "name": self._entity.device.name,
-            "manufacturer": "HIGOAL",
-            "model": self._entity.device.model_name,
-            "sw_version": self._entity.device.version,
-        }
+    def turn_off(self, **kwargs: Any) -> None:
+        self.entity.turn_off()
