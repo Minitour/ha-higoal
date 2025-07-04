@@ -8,6 +8,7 @@ similar to the Tuya device sharing SDK but using TCP sockets instead.
 import logging
 import socket
 import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -15,6 +16,9 @@ from .api import Api
 from .utils import generate_auth_command
 
 logger = logging.getLogger(__name__)
+
+RETRY_INTERVAL = 5.0
+SEND_MESSAGE_INTERVAL = 0.1  # 100 milliseconds
 
 
 class Message:
@@ -81,39 +85,60 @@ class MessageBroker(threading.Thread):
         with self._lock:
             self.message_handlers[id(handler)] = handler
 
-    def connect(self) -> bool:
-        """Connect to the TCP server."""
-        try:
-            with self._lock:
-                if self.connected:
-                    logger.warning("Already connected")
-                    return True
+    def connect(self, retry_interval: float = RETRY_INTERVAL) -> bool:
+        """Connect to the TCP server, retrying until successful or stop() is called.
 
-                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.socket.settimeout(10.0)
-                self.socket.connect((self.host, self.port))
-                self.socket.settimeout(None)
-                self.connected = True
+        Returns True once the connection is established, or False if the
+        broker was stopped (_stop_event set) before it could connect.
+        """
+        while not self._stop_event.is_set():
+            try:
+                with self._lock:
+                    if self.connected:
+                        logger.warning("Already connected")
+                        return True
 
-                # Start the thread if not already running
-                self.running = True
-                if not self.is_alive():
-                    self.start()
+                    # Create a fresh socket each attempt
+                    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.socket.settimeout(10.0)
+                    self.socket.connect((self.host, self.port))
+                    self.socket.settimeout(None)
 
-                logger.info(f"Connected to {self.host}:{self.port}")
+                    self.connected = True
+                    self.running = True
+                    if not self.is_alive():
+                        self.start()
 
-            self.on_connect()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect to {self.host}:{self.port}: {e}")
-            self.connected = False
-            return False
+                    logger.info("Connected to %s:%s", self.host, self.port)
+
+                # Out of the lock: perform any post‑connect work
+                self.on_connect()
+                return True
+
+            except Exception as e:
+                logger.error("Failed to connect to %s:%s: %s", self.host, self.port, e)
+
+                # Clean up the failed socket and mark as disconnected
+                with self._lock:
+                    self.connected = False
+                    if self.socket:
+                        try:
+                            self.socket.close()
+                        except Exception:
+                            pass
+                        self.socket = None
+
+            # Wait before the next attempt (returns early if stop_event is set)
+            if self._stop_event.wait(retry_interval):
+                break  # stop() was called – give up
+
+            logger.debug("Retrying connection to %s:%s …", self.host, self.port)
+
+        return False
 
     def disconnect(self) -> None:
         """Disconnect from the TCP server."""
         with self._lock:
-            if not self.connected:
-                return
 
             self.connected = False
             self.running = False
@@ -145,11 +170,12 @@ class MessageBroker(threading.Thread):
 
                 # Send the 48-byte message directly
                 self.socket.sendall(message.data)
+                # wait a little bit to avoid spamming the server.
+                time.sleep(SEND_MESSAGE_INTERVAL)
                 return True
 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            self.connected = False
             return False
 
     def on_receive(self, message: Message) -> None:
@@ -203,10 +229,6 @@ class MessageBroker(threading.Thread):
         logger.info(f"Message queue thread started for {self.host}:{self.port}")
         while self.running and not self._stop_event.is_set():
             try:
-                with self._lock:
-                    if not self.socket or not self.connected:
-                        break
-
                 # Read exactly 48 bytes
                 message_data = b''
                 while len(message_data) < 48:
@@ -223,11 +245,11 @@ class MessageBroker(threading.Thread):
                     self.on_disconnect()
                     continue
 
-            except socket.timeout:
-                continue
             except Exception as e:
                 logger.error(f"Error in receive loop: {e}")
-                break
+                self.api.reset()
+                self.on_disconnect()
+                continue
 
         # Clean up connection
         with self._lock:
