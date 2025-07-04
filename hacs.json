@@ -1,5 +1,6 @@
 {
     "name": "HIGOAL Integration",
     "homeassistant": "2025.7.0",
-    "hacs": "2.0.1"
+    "hacs": "2.0.1",
+    "country": ["IL"]
 }
