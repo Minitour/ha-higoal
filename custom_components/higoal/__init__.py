@@ -33,7 +33,7 @@ class HomeAssistantEntityListener(EntityListener):
     def on_entity_changed(self, entity: Entity):
         dispatcher_send(
             self.hass,
-            f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{entity.device.id}_{entity.id}",
+            f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{entity.device.id}",
             [],
         )
 

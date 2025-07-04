@@ -30,7 +30,7 @@ class BaseHigoalEntity(HomeAssistantEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{self.entity.device.id}_{self.entity.id}",
+                f"{HIGOAL_HA_SIGNAL_UPDATE_ENTITY}_{self.entity.device.id}",
                 self._handle_state_update,
             )
         )

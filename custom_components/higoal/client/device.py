@@ -129,7 +129,12 @@ class Entity:
         if self.type not in {TYPE_SHUTTER, TYPE_DIMMER}:
             return None
         status = list(self._current_response())
-        value = max(min(status[18 + self.id + 19], 100), 0)
+
+        value_offset = 18 + self.id + 16
+        if status[18 + self.id + 8] != 0:
+            value_offset = 18 + self.id + 19
+
+        value = max(min(status[value_offset], 100), 0)
         return value / 100
 
     def _current_response(self, use_cache: bool = True) -> bytes:

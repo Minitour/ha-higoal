@@ -73,8 +73,7 @@ class HigoalCover(BaseHigoalEntity, CoverEntity):
 
     @property
     def is_closed(self) -> bool | None:
-        current_percentage = self._open_button.percentage()
-        return self._calculate_position(current_percentage) == 0
+        return self.current_cover_position == 0
 
     @property
     def is_closing(self) -> bool | None:
