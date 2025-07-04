@@ -18,7 +18,7 @@ from .utils import generate_auth_command
 logger = logging.getLogger(__name__)
 
 RETRY_INTERVAL = 5.0
-SEND_MESSAGE_INTERVAL = 0.1  # 100 milliseconds
+SEND_MESSAGE_INTERVAL = 0.250  # 250 milliseconds
 
 
 class Message:

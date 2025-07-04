@@ -29,6 +29,7 @@ In some cases the socket connection may be lost, however the integration is able
 
 ### Supported Entities
 - **Switch**: Control supported Higoal switches.
+- **Light**: Control dimmer-based lights.
 - **Cover**: Open and close supported Higoal covers.
 
 ## Tested Models
