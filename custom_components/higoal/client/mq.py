@@ -49,6 +49,19 @@ class Message:
     def is_status(self):
         return self.data[0] == 187 and self.data[1] == 91
 
+    @property
+    def is_ping(self):
+        return self.data[0] == 204 and self.data[1] == 92
+
+    @property
+    def device_identifier(self):
+        if self.is_status:
+            return self.data[9], self.data[10], self.data[11], self.data[12]
+        elif self.is_ping:
+            return self.data[3], self.data[4], self.data[5], self.data[6]
+        else:
+            return None
+
 
 class MessageHandler(ABC):
     """Abstract base class for message handlers."""
@@ -185,7 +198,7 @@ class MessageBroker(threading.Thread):
                 try:
                     handler.on_receive(message)
                 except Exception as e:
-                    logger.error(f"Error in message handler: {e}")
+                    logger.exception(f"Error in message handler: {e}")
         else:
             logger.info(f"Received message: {message.data.hex()}")
 

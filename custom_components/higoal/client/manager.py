@@ -1,10 +1,21 @@
 import abc
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 import requests
 
 from .mq import MessageBroker, Message, MessageHandler
 from .api import Api
 from .device import DeviceRepository
+
+
+@dataclass
+class OfflineDevice:
+    device: 'Device'
+    last_update: datetime
+
+
+type UnknownDevice = object()
 
 
 class EntityListener(abc.ABC):
@@ -39,6 +50,7 @@ class Manager(MessageHandler):
         self.device_repository = DeviceRepository(self)
         self.device_map = {}
         self.entity_listener = entity_listener
+        self.offline_devices = {}
 
     def get_devices(self):
         self.api.sign_in()
@@ -52,14 +64,19 @@ class Manager(MessageHandler):
                 continue
             self.device_map[device.identifier] = device
             new_devices.append(device)
+            # assume newly discovered devices are offline by default
+            self.offline_devices[device.identifier] = OfflineDevice(device=device, last_update=datetime.now())
 
-        for device in self.device_map:
-            if device not in full_set:
+        # check for deleted devices
+        for device_id, device in self.device_map.items():
+            if device is UnknownDevice:
+                continue
+            if device_id not in full_set:
                 # device has been removed
-                deleted_devices.append(device)
+                deleted_devices.append(device_id)
 
-        for device in deleted_devices:
-            del self.device_map[device.identifier]
+        for device_id in deleted_devices:
+            del self.device_map[device_id]
 
         return new_devices, deleted_devices
 
@@ -75,18 +92,30 @@ class Manager(MessageHandler):
         sharing_mq.connect()
         self.mq = sharing_mq
 
-        for device in self.device_map.values():
+        for device in list(self.device_map.values()):
+            if device is UnknownDevice:
+                continue
             self.send_command(device.status_command())
 
+    def check_offline_devices(self):
+        for offline_device in self.offline_devices.values():
+            if not offline_device.last_update + timedelta(seconds=30) < datetime.now():
+                continue
+            offline_device.last_update = datetime.now()
+            self.send_command(offline_device.device.status_command())
+
     def on_receive(self, message: Message):
+        self.check_offline_devices()
         if not message.is_status:
             return
-        data = message.data
-        a, b, c, d = data[9], data[10], data[11], data[12]
-        device_byte_id = (a, b, c, d)
-        device = self.device_map.get(device_byte_id)
+
+        device = self.device_map.get(message.device_identifier)
+
+        if device is UnknownDevice:
+            return
 
         if device is None:
+            self.device_map[message.device_identifier] = UnknownDevice
             # Got update on a device which we don't have.
             # This could indicate a new device being added.
             new_devices, deleted_devices = self.get_devices()
@@ -102,7 +131,7 @@ class Manager(MessageHandler):
             return
 
         # remove checksum info
-        data = list(data)
+        data = list(message.data)
         data[2] = 0
         data[3] = 0
         data[4] = 0
@@ -112,6 +141,12 @@ class Manager(MessageHandler):
         changed_entities = device.set_current_status_response(bytes(data))
         for entity in changed_entities:
             self.entity_listener.on_entity_changed(entity)
+
+        # if one of the entities is offline
+        if device.offline:
+            self.offline_devices[device.identifier] = OfflineDevice(device=device, last_update=datetime.now())
+        elif device.identifier in self.offline_devices:
+            del self.offline_devices[device.identifier]
 
     def send_command(self, data: bytes):
         if not self.mq:

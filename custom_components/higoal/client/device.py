@@ -19,9 +19,9 @@ class Entity:
 
     id: int  # The index of the button
     name: str  # The name of the button
-    type: int # The type of button
-    device: "Device" = field(repr=False) # Reference to the containing device
-    _response: bytes = field(repr=False, default=None) # The current state
+    type: int  # The type of button
+    device: "Device" = field(repr=False)  # Reference to the containing device
+    _response: bytes = field(repr=False, default=None)  # The current state
 
     @property
     def response(self):
@@ -119,7 +119,7 @@ class Entity:
         """
         Check if the switch is online.
         """
-        response = list(self._current_response())
+        response = self._current_response()
         return response[18 + self.id] != _OFFLINE_VALUE
 
     def percentage(self) -> float | None:
@@ -128,7 +128,7 @@ class Entity:
         """
         if self.type not in {TYPE_SHUTTER, TYPE_DIMMER}:
             return None
-        status = list(self._current_response())
+        status = self._current_response()
 
         value_offset = 18 + self.id + 16
         if status[18 + self.id + 8] != 0:
@@ -248,6 +248,10 @@ class Device:
                 entities.append(entity)
 
         return entities
+
+    @property
+    def offline(self):
+        return any([not entity.is_online() for entity in self.entities])
 
 
 class DeviceRepository:
