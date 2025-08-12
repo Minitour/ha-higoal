@@ -6,9 +6,10 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from slugify import slugify
 
-from .client.api import Api
+from .client.api import AsyncApi
 from .const import DOMAIN, logger
 
 
@@ -22,10 +23,12 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             user_input: dict | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Handle a flow initialized by the user."""
+        http_client = async_get_clientsession(self.hass)
         _errors = {}
         if user_input is not None:
             try:
-                self._test_credentials(
+                await self._test_credentials(
+                    http_client,
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                 )
@@ -64,7 +67,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=_errors,
         )
 
-    def _test_credentials(self, username: str, password: str) -> None:
+    async def _test_credentials(self, http_client, username: str, password: str) -> None:
         """Validate credentials."""
-        api = Api(username=username, password=password)
-        api.sign_in()
+        api = AsyncApi(username=username, password=password, session=http_client)
+        await api.sign_in()

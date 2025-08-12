@@ -72,3 +72,40 @@ class Api:
             raise RuntimeError("Sign‑in failed: token missing")
 
         self._sign_in_time = datetime.now(UTC)  # record fresh timestamp
+
+
+class AsyncApi(Api):
+
+    def __init__(self,
+                 domain: str = "server.higoal.net",
+                 port: int = 8143,
+                 version: str = "V3.21.1",
+                 username: str | None = None,
+                 password: str | None = None,
+                 session=None):
+        super().__init__(domain, port, version, username, password, session)
+        self.session = session
+
+    async def sign_in(self) -> None:
+        """Log in (again) if we are not signed‑in or the token is stale."""
+        if self.is_signed_in:  # fresh token => nothing to do
+            return
+
+        payload = (
+            f"password={self._password}&username={self._username}&ver={self._version}"
+        )
+        headers = {"content-type": "application/x-www-form-urlencoded; charset=utf-8"}
+
+        response = await self.session.post(f"{self.url}/login", data=payload, headers=headers)
+        body = await response.json()
+
+        self.user_id = body.get("repData", {}).get("uid")
+        self.token = body.get("repData", {}).get("token")
+        self.home_ids = [
+            home.get("id") for home in body.get("repData", {}).get("homeList", [])
+        ]
+
+        if self.token is None:
+            raise RuntimeError("Sign‑in failed: token missing")
+
+        self._sign_in_time = datetime.now(UTC)
