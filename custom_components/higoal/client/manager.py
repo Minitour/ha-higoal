@@ -1,12 +1,16 @@
 import abc
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import requests
+from requests.exceptions import ConnectionError, RequestException
 
 from .mq import MessageBroker, Message, MessageHandler
 from .api import Api
 from .device import DeviceRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,10 +77,10 @@ class Manager(MessageHandler):
                 continue
             if device_id not in full_set:
                 # device has been removed
-                deleted_devices.append(device_id)
+                deleted_devices.append(device)
 
-        for device_id in deleted_devices:
-            del self.device_map[device_id]
+        for device in deleted_devices:
+            del self.device_map[device.identifier]
 
         return new_devices, deleted_devices
 
@@ -118,15 +122,27 @@ class Manager(MessageHandler):
             self.device_map[message.device_identifier] = UnknownDevice
             # Got update on a device which we don't have.
             # This could indicate a new device being added.
-            new_devices, deleted_devices = self.get_devices()
-            for device in new_devices:
-                self.entity_listener.on_device_added(device)
-            for device in deleted_devices:
-                self.entity_listener.on_device_removed(device)
+            try:
+                new_devices, deleted_devices = self.get_devices()
+                for device in new_devices:
+                    self.entity_listener.on_device_added(device)
+                for device in deleted_devices:
+                    self.entity_listener.on_device_removed(device)
 
-            if new_devices:
-                # try again
-                return self.on_receive(message)
+                if new_devices:
+                    # try again
+                    return self.on_receive(message)
+            except (ConnectionError, RequestException) as e:
+                logger.warning(
+                    "Failed to fetch device list due to connection error: %s. "
+                    "Will retry on next message.",
+                    e
+                )
+                # Don't remove UnknownDevice marker so we can retry later
+                return
+            except Exception as e:
+                logger.error("Unexpected error while fetching device list: %s", e, exc_info=True)
+                return
             # do nothing
             return
 

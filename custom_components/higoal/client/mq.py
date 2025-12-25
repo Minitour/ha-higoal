@@ -125,11 +125,29 @@ class MessageBroker(threading.Thread):
                     logger.info("Connected to %s:%s", self.host, self.port)
 
                 # Out of the lock: perform any post‑connect work
-                self.on_connect()
+                try:
+                    self.on_connect()
+                except Exception as e:
+                    # on_connect() failed (likely sign_in() SSL error)
+                    # The error is already logged in on_connect(), just mark as disconnected
+                    with self._lock:
+                        self.connected = False
+                        if self.socket:
+                            try:
+                                self.socket.close()
+                            except Exception:
+                                pass
+                            self.socket = None
+                    # Continue to retry loop
+                    if self._stop_event.wait(retry_interval):
+                        break
+                    logger.debug("Retrying connection to %s:%s …", self.host, self.port)
+                    continue
+                
                 return True
 
             except Exception as e:
-                logger.error("Failed to connect to %s:%s: %s", self.host, self.port, e)
+                logger.error("Failed to connect TCP socket to %s:%s: %s", self.host, self.port, e)
 
                 # Clean up the failed socket and mark as disconnected
                 with self._lock:
@@ -183,8 +201,8 @@ class MessageBroker(threading.Thread):
 
                 # Send the 48-byte message directly
                 self.socket.sendall(message.data)
-                # wait a little bit to avoid spamming the server.
-                time.sleep(SEND_MESSAGE_INTERVAL)
+                # Note: Removed sleep to avoid blocking the event loop.
+                # Rate limiting is handled by the natural flow of message processing.
                 return True
 
         except Exception as e:
@@ -204,10 +222,21 @@ class MessageBroker(threading.Thread):
 
     def on_connect(self):
         # sign in if we haven't already
-        self.api.sign_in()
+        try:
+            self.api.sign_in()
+        except Exception as e:
+            logger.error("Failed to sign in via HTTPS (port 8143): %s", e)
+            # Disconnect TCP connection since authentication failed
+            self.disconnect()
+            raise
 
         # Send auth command
         token = self.api.token
+        if token is None:
+            logger.error("No token available after sign in")
+            self.disconnect()
+            return
+        
         auth_command = generate_auth_command(token)
         self.send_message(Message(auth_command))
 
