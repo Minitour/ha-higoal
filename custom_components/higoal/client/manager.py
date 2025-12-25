@@ -103,8 +103,6 @@ class Manager(MessageHandler):
 
     def check_offline_devices(self):
         for offline_device in self.offline_devices.values():
-            if not offline_device.last_update + timedelta(seconds=30) < datetime.now():
-                continue
             offline_device.last_update = datetime.now()
             self.send_command(offline_device.device.status_command())
 
