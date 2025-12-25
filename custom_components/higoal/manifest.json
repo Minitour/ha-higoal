@@ -9,5 +9,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Minitour/ha-higoal/issues",
   "requirements": ["requests==2.32.5"],
-  "version": "1.1.7"
+  "version": "1.1.8"
 }

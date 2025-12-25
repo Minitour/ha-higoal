@@ -200,6 +200,7 @@ class MessageBroker(threading.Thread):
                     return False
 
                 # Send the 48-byte message directly
+                logger.debug("Sending socket command: %s", message.data.hex())
                 self.socket.sendall(message.data)
                 # Note: Removed sleep to avoid blocking the event loop.
                 # Rate limiting is handled by the natural flow of message processing.
@@ -238,6 +239,7 @@ class MessageBroker(threading.Thread):
             return
         
         auth_command = generate_auth_command(token)
+        logger.debug("Sending auth command: %s", bytes(auth_command).hex())
         self.send_message(Message(auth_command))
 
     def on_disconnect(self):
@@ -281,6 +283,7 @@ class MessageBroker(threading.Thread):
                     message_data += chunk
 
                 if len(message_data) == 48:
+                    logger.debug("Received socket command: %s", message_data.hex())
                     message = Message(message_data)
                     self.on_receive(message)
                 else:
