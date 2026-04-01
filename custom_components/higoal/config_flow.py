@@ -64,6 +64,9 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 },
             ),
+            description_placeholders={
+                "url": "https://github.com/Minitour/ha-higoal",
+            },
             errors=_errors,
         )
 
