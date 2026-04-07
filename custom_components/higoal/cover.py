@@ -31,9 +31,7 @@ async def async_setup_entry(
         for device_id in device_ids:
             higoal_device = hass_data.manager.device_map[device_id]
             for entity in higoal_device.entities:
-                if entity.type != device.TYPE_SHUTTER:
-                    continue
-                if entity.name == "":
+                if not entity.is_open_button:
                     continue
 
                 related = entity.get_related_entity()

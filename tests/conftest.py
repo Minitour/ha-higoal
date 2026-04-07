@@ -47,10 +47,10 @@ def manager():
 
 @pytest.fixture
 def four_button_device(manager):
-    """4B panel: button 0 = light, buttons 1+2 = shutter pair, button 3 = switch."""
+    """4B panel: buttons 0+1 = switches, buttons 2+3 = shutter pair (open, close)."""
     data = make_device_dict(
-        button_names="Living Room;Blinds Up;;Hall",
-        button_types="1,3,3,1",
+        button_names="Living Room;Hall;Blinds Up;",
+        button_types="1,1,3,3",
     )
     return Device.init_from(data, manager)
 

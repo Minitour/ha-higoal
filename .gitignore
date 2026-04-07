@@ -21,3 +21,4 @@ config/*
 custom_components/higoal/test.py
 
 .venv/
+higoal_source/
