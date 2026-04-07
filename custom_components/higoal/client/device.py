@@ -40,11 +40,20 @@ class Entity:
             return True
         return False
 
+    @property
+    def is_open_button(self) -> bool:
+        """Shutter open buttons sit at even 0-based indices (1-based odd: 1,3,5,7)."""
+        return self.type == TYPE_SHUTTER and self.id % 2 == 0
+
+    @property
+    def is_close_button(self) -> bool:
+        """Shutter close buttons sit at odd 0-based indices (1-based even: 2,4,6,8)."""
+        return self.type == TYPE_SHUTTER and self.id % 2 == 1
+
     def _get_on_action(self) -> int:
-        action = _ON_VALUE
-        if self.type == TYPE_SHUTTER and self.name == "":
-            action = _OFF_VALUE
-        return action
+        if self.type == TYPE_SHUTTER:
+            return _ON_VALUE if self.is_open_button else _OFF_VALUE
+        return _ON_VALUE
 
     def _get_off_action(self) -> int:
         if self.type == TYPE_SHUTTER:
@@ -146,20 +155,19 @@ class Entity:
         return bytes([0] * 48)
 
     def get_related_entity(self) -> Optional["Entity"]:
-        if self.type != TYPE_SHUTTER:
+        """Return the paired shutter entity using hardware index pairing.
+
+        Shutter buttons are paired in fixed hardware pairs: (0,1), (2,3), (4,5), (6,7).
+        Only the open button (even 0-based id) should request its partner (the close
+        button at id ^ 1).  Returns None for non-shutter or close buttons.
+        """
+        if not self.is_open_button:
             return None
-        if self.name == "":
-            return None
-        index = 0
-        for index, button in enumerate(self.device.entities):
-            if button == self:
-                break
-        if index + 1 >= len(self.device.entities):
-            return None
-        button = self.device.entities[index + 1]
-        if button.type != TYPE_SHUTTER:
-            return None
-        return button
+        partner_id = self.id ^ 1
+        for entity in self.device.entities:
+            if entity.id == partner_id and entity.type == TYPE_SHUTTER:
+                return entity
+        return None
 
 
 @dataclass

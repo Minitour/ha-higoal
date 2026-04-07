@@ -37,3 +37,21 @@ jobs:
             category: "integration"
             # Remove this 'ignore' key when you have added brand images for your integration to https://github.com/home-assistant/brands
             ignore: "brands"
+
+  tests:
+    name: "Tests"
+    runs-on: "ubuntu-latest"
+    steps:
+        - name: "Checkout the repository"
+          uses: "actions/checkout@v6.0.1"
+
+        - name: "Install uv"
+          uses: "astral-sh/setup-uv@v6"
+
+        - name: "Set up Python"
+          uses: "actions/setup-python@v5"
+          with:
+            python-version: "3.13"
+
+        - name: "Run tests"
+          run: uv run --extra test --python 3.13 pytest -v
