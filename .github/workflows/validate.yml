@@ -54,4 +54,4 @@ jobs:
             python-version: "3.13"
 
         - name: "Run tests"
-          run: uv run --python 3.13 pytest -v
+          run: uv run --extra test --python 3.13 pytest -v
