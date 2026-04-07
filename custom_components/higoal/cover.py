@@ -36,7 +36,11 @@ async def async_setup_entry(
                 if entity.name == "":
                     continue
 
-                entities.append(HigoalCover(entity, entity.get_related_entity()))
+                related = entity.get_related_entity()
+                if related is None:
+                    continue
+
+                entities.append(HigoalCover(entity, related))
 
         async_add_entities(entities)
 
@@ -77,17 +81,23 @@ class HigoalCover(BaseHigoalEntity, CoverEntity):
 
     @property
     def is_closing(self) -> bool | None:
+        if self._close_button is None:
+            return None
         return self._close_button.is_turned_on()
 
     @property
     def is_opening(self) -> bool | None:
+        if self._open_button is None:
+            return None
         return self._open_button.is_turned_on()
 
     def open_cover(self, **kwargs: Any) -> None:
-        self._open_button.turn_on()
+        if self._open_button is not None:
+            self._open_button.turn_on()
 
     def close_cover(self, **kwargs: Any) -> None:
-        self._close_button.turn_on()
+        if self._close_button is not None:
+            self._close_button.turn_on()
 
     def stop_cover(self, **kwargs: Any) -> None:
         if self.is_closing:
