@@ -4,3 +4,13 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "requests",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["custom_components/higoal"]
