@@ -30,10 +30,10 @@ class Entity:
     def set_response(self, response: bytes):
         old_value = self._response or bytes([0] * 48)
         old_status = old_value[18 + self.id]
-        old_percentage = old_value[18 + self.id + 19]
+        old_percentage = old_value[18 + self.id + 16]
 
         new_status = response[18 + self.id]
-        new_percentage = response[18 + self.id + 19]
+        new_percentage = response[18 + self.id + 16]
         self._response = response
         if old_status != new_status or old_percentage != new_percentage:
             # something has changed in the entity
@@ -108,7 +108,7 @@ class Entity:
             action=action,
         )
         cmd = list(cmd)
-        cmd[18 + self.id + 19] = value
+        cmd[18 + self.id + 16] = value
         self.device.manager.send_command(bytes(cmd))
 
     def can_set_percentage(self) -> bool:
@@ -138,12 +138,7 @@ class Entity:
         if self.type not in {TYPE_SHUTTER, TYPE_DIMMER}:
             return None
         status = self._current_response()
-
-        value_offset = 18 + self.id + 16
-        if status[18 + self.id + 8] != 0:
-            value_offset = 18 + self.id + 19
-
-        value = max(min(status[value_offset], 100), 0)
+        value = max(min(status[18 + self.id + 16], 100), 0)
         return value / 100
 
     def _current_response(self, use_cache: bool = True) -> bytes:

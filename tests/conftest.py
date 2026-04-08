@@ -75,21 +75,16 @@ def shutter_next_is_switch(manager):
     return Device.init_from(data, manager)
 
 
-def build_status_response(entity_statuses: dict[int, int], entity_percentages: dict[int, int] | None = None) -> bytes:
+def build_status_response(entity_statuses: dict[int, int], percentages: dict[int, int] | None = None) -> bytes:
     """Build a 48-byte status response with given entity values.
 
     entity_statuses: {entity_id: status_byte}  (e.g. 255=ON, 240=OFF, 0=OFFLINE)
-    entity_percentages: {entity_id: percentage_byte}  (0-100)
-
-    The percentage() method reads from offset 18+id+19 only when the
-    selector byte at 18+id+8 is non-zero; otherwise it reads 18+id+16.
-    This helper sets the selector byte so the +19 path is used.
+    percentages: {entity_id: percentage_byte}  (0-100), placed at offset 18+id+16
     """
     data = bytearray(48)
     for eid, val in entity_statuses.items():
         data[18 + eid] = val
-    if entity_percentages:
-        for eid, val in entity_percentages.items():
-            data[18 + eid + 8] = 1    # selector byte → use +19 offset
-            data[18 + eid + 19] = val
+    if percentages:
+        for eid, val in percentages.items():
+            data[18 + eid + 16] = val
     return bytes(data)

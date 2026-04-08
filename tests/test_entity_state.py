@@ -104,6 +104,28 @@ class TestPercentage:
         assert device.entities[0].percentage() == 1.0
 
 
+    def test_issue_62_raw_diagnostics(self, manager):
+        """Regression test: raw bytes from issue #62 diagnostics dump.
+
+        The user's 4B panel had blinds at ~13% closed but HA showed 100% open.
+        Byte 34 (offset 18+0+16) = 13, byte 37 (offset 18+0+19) = 0.
+        The old code read byte 37 (0) instead of byte 34 (13).
+        """
+        raw = bytes([
+            187, 91, 0, 0, 0, 3, 1, 2, 1, 102, 35, 5, 0, 0, 20,
+            255, 240, 240, 240, 240, 0, 0, 240, 240, 240, 240,
+            30, 29, 0, 0, 0, 0, 0, 0,
+            13, 13, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ])
+        data = make_device_dict(button_names="Balcony shades;Balcony shades down", button_types="3,3")
+        device = Device.init_from(data, manager)
+        device.set_current_status_response(raw)
+
+        assert device.entities[0].percentage() == 0.13
+        assert device.entities[1].percentage() == 0.13
+
+
 class TestSetResponse:
     def test_change_detected(self, manager):
         data = make_device_dict(button_names="A", button_types="1")
@@ -122,5 +144,27 @@ class TestSetResponse:
         entity = device.entities[0]
 
         response = build_status_response({0: 240})
+        entity.set_response(response)
+        assert entity.set_response(response) is False
+
+    def test_percentage_change_detected(self, manager):
+        """set_response must detect percentage changes at offset 18+id+16."""
+        data = make_device_dict(button_names="Blinds;", button_types="3,3")
+        device = Device.init_from(data, manager)
+        entity = device.entities[0]
+
+        response1 = build_status_response({0: 240}, {0: 0})
+        entity.set_response(response1)
+
+        response2 = build_status_response({0: 240}, {0: 50})
+        assert entity.set_response(response2) is True
+
+    def test_percentage_no_change_not_detected(self, manager):
+        """No false positive when only unrelated bytes differ."""
+        data = make_device_dict(button_names="Blinds;", button_types="3,3")
+        device = Device.init_from(data, manager)
+        entity = device.entities[0]
+
+        response = build_status_response({0: 240}, {0: 25})
         entity.set_response(response)
         assert entity.set_response(response) is False
