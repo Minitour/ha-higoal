@@ -55,6 +55,12 @@ class Manager(MessageHandler):
         self.device_map = {}
         self.entity_listener = entity_listener
         self.offline_devices = {}
+        # Rate-limit offline-device re-polling. Without this, every received
+        # message triggers a status query for every offline device, which on
+        # boot (when all devices start offline) creates a self-inflicted
+        # send-buffer storm that the cloud cannot keep up with.
+        self._offline_check_interval = timedelta(seconds=30)
+        self._last_offline_check = datetime.now() - self._offline_check_interval
 
     def get_devices(self):
         self.api.sign_in()
@@ -102,8 +108,12 @@ class Manager(MessageHandler):
             self.send_command(device.status_command())
 
     def check_offline_devices(self):
+        now = datetime.now()
+        if now - self._last_offline_check < self._offline_check_interval:
+            return
+        self._last_offline_check = now
         for offline_device in self.offline_devices.values():
-            offline_device.last_update = datetime.now()
+            offline_device.last_update = now
             self.send_command(offline_device.device.status_command())
 
     def on_receive(self, message: Message):
