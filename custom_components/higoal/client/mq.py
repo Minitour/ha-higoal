@@ -114,6 +114,21 @@ class MessageBroker(threading.Thread):
                     # Create a fresh socket each attempt
                     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self.socket.settimeout(10.0)
+                    # TCP keepalive + user-timeout: detect zombie connections.
+                    # The Higoal cloud occasionally stops responding without
+                    # closing the socket; without these the OS waits ~15 min
+                    # before declaring the peer dead, leaving the integration
+                    # stuck with entities unresponsive.
+                    self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    if hasattr(socket, "TCP_KEEPIDLE"):
+                        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+                    if hasattr(socket, "TCP_KEEPINTVL"):
+                        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                    if hasattr(socket, "TCP_KEEPCNT"):
+                        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
+                    if hasattr(socket, "TCP_USER_TIMEOUT"):
+                        # Force-fail the socket if data sits unacked >60s.
+                        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, 60_000)
                     self.socket.connect((self.host, self.port))
                     self.socket.settimeout(None)
 
