@@ -27,7 +27,18 @@ class Entity:
     def response(self):
         return self._response
 
+    @property
+    def display_name(self) -> str:
+        """Return a stable Home Assistant display name for this entity."""
+        name = (self.name or "").strip()
+        if name:
+            return name
+
+        device_name = (self.device.name or "").strip() or self.device.id
+        return f"{device_name} channel {self.id + 1}"
+
     def set_response(self, response: bytes):
+        first_response = self._response is None
         old_value = self._response or bytes([0] * 48)
         old_status = old_value[18 + self.id]
         old_percentage = old_value[18 + self.id + 16]
@@ -35,6 +46,8 @@ class Entity:
         new_status = response[18 + self.id]
         new_percentage = response[18 + self.id + 16]
         self._response = response
+        if first_response:
+            return True
         if old_status != new_status or old_percentage != new_percentage:
             # something has changed in the entity
             return True
@@ -150,7 +163,8 @@ class Entity:
         return bytes([0] * 48)
 
     def get_related_entity(self) -> Optional["Entity"]:
-        """Return the paired shutter entity using hardware index pairing.
+        """
+        Return the paired shutter entity using hardware index pairing.
 
         Shutter buttons are paired in fixed hardware pairs: (0,1), (2,3), (4,5), (6,7).
         Only the open button (even 0-based id) should request its partner (the close
@@ -181,7 +195,7 @@ class Device:
     mac: str
     version: str
     entities: list[Entity] = field(repr=False)
-    manager: 'Manager' = field(repr=False)
+    manager: "Manager" = field(repr=False)
     _status: bytes = field(repr=False, default=None)
 
     @property
@@ -208,7 +222,9 @@ class Device:
             entities=entities,
             manager=manager,
         )
-        for i, (button_name, button_type) in enumerate(zip(button_names, button_types, strict=False)):
+        for i, (button_name, button_type) in enumerate(
+            zip(button_names, button_types, strict=False)
+        ):
             button_type = int(button_type)
             if button_type == 0:
                 continue
@@ -221,7 +237,12 @@ class Device:
     @property
     def identifier(self):
         status_command = self.status_command()
-        return status_command[9], status_command[10], status_command[11], status_command[12]
+        return (
+            status_command[9],
+            status_command[10],
+            status_command[11],
+            status_command[12],
+        )
 
     def status_command(self) -> bytes:
         """
@@ -275,7 +296,10 @@ class DeviceRepository:
                 "content-type": "application/x-www-form-urlencoded; charset=utf-8"
             }
             response = self.manager.api.session.request(
-                "POST", f"{self.manager.api.url}/get_host_list", data=payload, headers=headers
+                "POST",
+                f"{self.manager.api.url}/get_host_list",
+                data=payload,
+                headers=headers,
             )
             body = response.json()
             devices.extend(body.get("repData", []))
