@@ -138,6 +138,15 @@ class TestSetResponse:
         response2 = build_status_response({0: 255})
         assert entity.set_response(response2) is True
 
+    def test_first_response_detected_even_when_status_is_zero(self, manager):
+        data = make_device_dict(button_names="A", button_types="1")
+        device = Device.init_from(data, manager)
+        entity = device.entities[0]
+
+        response = build_status_response({0: 0})
+
+        assert entity.set_response(response) is True
+
     def test_no_change_detected(self, manager):
         data = make_device_dict(button_names="A", button_types="1")
         device = Device.init_from(data, manager)

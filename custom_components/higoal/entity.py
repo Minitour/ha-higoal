@@ -1,18 +1,20 @@
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity as HomeAssistantEntity
-from .const import DOMAIN, HIGOAL_HA_SIGNAL_UPDATE_ENTITY
+
 from .client.device import Entity
+from .const import DOMAIN, HIGOAL_HA_SIGNAL_UPDATE_ENTITY
 
 
 class BaseHigoalEntity(HomeAssistantEntity):
-
-    def __init__(self, entity: Entity):
+    def __init__(self, entity: Entity) -> None:
         self.entity = entity
         self._attr_unique_id = f"higoal:{entity.device.id}:{entity.id}"
-        self._attr_name = entity.name or "Higoal Entity"
+        self._attr_name = entity.display_name
 
     @property
-    def available(self):
+    def available(self) -> bool:
+        if self.entity.response is None:
+            return True
         return self.entity.is_online()
 
     @property
@@ -36,6 +38,6 @@ class BaseHigoalEntity(HomeAssistantEntity):
         )
 
     async def _handle_state_update(
-            self, updated_status_properties: list[str] | None
+        self, updated_status_properties: list[str] | None
     ) -> None:
         self.async_write_ha_state()

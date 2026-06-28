@@ -1,7 +1,7 @@
 """Tests for Device.init_from and entity construction."""
 
-from client.device import Device, Entity, TYPE_SWITCH, TYPE_DIMMER, TYPE_SHUTTER
-from conftest import make_device_dict, make_manager_stub
+from client.device import TYPE_DIMMER, TYPE_SHUTTER, TYPE_SWITCH, Device
+from conftest import make_device_dict
 
 
 class TestDeviceInitFrom:
@@ -45,6 +45,28 @@ class TestDeviceInitFrom:
         assert device.entities[3].name == ""
         assert device.entities[3].type == TYPE_SHUTTER
 
+    def test_blank_entity_name_uses_device_channel_fallback(self, manager):
+        data = make_device_dict(
+            name="Study Lights",
+            button_names=";;",
+            button_types="0,1,1",
+        )
+        device = Device.init_from(data, manager)
+
+        assert device.entities[0].display_name == "Study Lights channel 2"
+        assert device.entities[1].display_name == "Study Lights channel 3"
+
+    def test_blank_entity_name_uses_device_id_when_device_name_is_blank(self, manager):
+        data = make_device_dict(
+            device_id="ZCLCBZ",
+            name=" ",
+            button_names="",
+            button_types="1",
+        )
+        device = Device.init_from(data, manager)
+
+        assert device.entities[0].display_name == "ZCLCBZ channel 1"
+
     def test_type_zero_buttons_are_skipped(self, manager):
         data = make_device_dict(
             button_names="A;;B",
@@ -75,14 +97,20 @@ class TestDeviceInitFrom:
 
 
 class TestDeviceStatusResponse:
-    def test_set_current_status_response_returns_changed_entities(self, four_button_device, manager):
+    def test_set_current_status_response_returns_changed_entities(
+        self, four_button_device, manager
+    ):
         from conftest import build_status_response
 
         response = build_status_response({0: 255})
         changed = four_button_device.set_current_status_response(response)
 
-        assert len(changed) == 1
-        assert changed[0].id == 0
+        assert [entity.id for entity in changed] == [0, 1, 2, 3]
+
+        response = build_status_response({0: 240, 1: 255})
+        changed = four_button_device.set_current_status_response(response)
+
+        assert [entity.id for entity in changed] == [0, 1]
 
     def test_identical_response_returns_empty(self, four_button_device, manager):
         from conftest import build_status_response
