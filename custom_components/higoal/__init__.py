@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from requests.exceptions import RequestException
+
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import dispatcher_send
 
@@ -68,7 +71,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: HigoalConfigEntry) -> bo
     )
 
     # Get all devices
-    await hass.async_add_executor_job(manager.get_devices)
+    try:
+        await hass.async_add_executor_job(manager.get_devices)
+    except RequestException as err:
+        # The Higoal cloud (server.higoal.net) was unreachable — e.g. DNS not
+        # available yet during a cold boot, or a transient network blip. Raise
+        # ConfigEntryNotReady so HA retries setup with backoff, instead of
+        # leaving the entry permanently failed until a manual reload.
+        raise ConfigEntryNotReady(f"Unable to reach Higoal cloud: {err}") from err
 
     # Connection is successful, store the manager & listener
     entry.runtime_data = IntegrationData(manager=manager, listener=device_listener)
