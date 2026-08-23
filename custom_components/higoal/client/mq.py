@@ -6,6 +6,7 @@ similar to the Tuya device sharing SDK but using TCP sockets instead.
 """
 
 import logging
+import queue
 import socket
 import threading
 import time
@@ -19,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 RETRY_INTERVAL = 5.0
 SEND_MESSAGE_INTERVAL = 0.250  # 250 milliseconds
+
+FRAME_SIZE = 48
+# Frame-start markers the Higoal cloud relay uses: bb5b = status reply,
+# cc5c = ping. (Outbound commands start with aa5a.) The relay does not frame
+# its stream reliably — a single short write during the auth handshake leaves
+# the byte stream offset by a few bytes — so run() resyncs to one of these
+# markers before slicing each 48-byte frame.
+FRAME_START_MARKERS = (b"\xbb\x5b", b"\xcc\x5c")
 
 
 class Message:
@@ -92,6 +101,19 @@ class MessageBroker(threading.Thread):
         # Thread control
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+
+        # Outbound message queue, drained by a dedicated sender thread that
+        # paces sends at SEND_MESSAGE_INTERVAL. The Higoal cloud relay
+        # silently drops all but the first 1-2 commands when they arrive in
+        # a sub-millisecond burst; pacing fixes that without blocking either
+        # HA's asyncio loop or this broker's receive loop.
+        self._send_queue: "queue.Queue[Optional[Message]]" = queue.Queue()
+        self._sender_thread = threading.Thread(
+            target=self._sender_loop,
+            daemon=True,
+            name=f"{name}Sender",
+        )
+        self._sender_thread.start()
 
     def add_message_handler(self, handler: MessageHandler) -> None:
         """Set the message handler for incoming messages."""
@@ -200,12 +222,38 @@ class MessageBroker(threading.Thread):
         logger.info("Disconnected from server")
 
     def send_message(self, message: Message) -> bool:
-        """Send a message through the socket."""
+        """Enqueue a message for the sender thread to dispatch.
+
+        Returns True if queued, False if the broker is disconnected. The
+        actual socket write happens in the sender thread, paced at
+        SEND_MESSAGE_INTERVAL — see _sender_loop().
+        """
         if not self.connected:
             logger.warning("Not connected to server")
             return False
 
-        return self._send_message_internal(message)
+        self._send_queue.put(message)
+        return True
+
+    def _sender_loop(self) -> None:
+        """Drain the outbound queue at SEND_MESSAGE_INTERVAL pace.
+
+        Runs in its own daemon thread so neither HA's event loop (entity
+        service calls) nor the broker's receive loop (Manager.on_receive →
+        check_offline_devices) blocks while we wait between sends.
+        """
+        while not self._stop_event.is_set():
+            try:
+                message = self._send_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if message is None:
+                break
+            if not self.connected:
+                continue
+            self._send_message_internal(message)
+            if self._stop_event.wait(SEND_MESSAGE_INTERVAL):
+                break
 
     def _send_message_internal(self, message: Message) -> bool:
         """Internal method to send a message through the socket."""
@@ -217,8 +265,6 @@ class MessageBroker(threading.Thread):
                 # Send the 48-byte message directly
                 logger.debug("Sending socket command: %s", message.data.hex())
                 self.socket.sendall(message.data)
-                # Note: Removed sleep to avoid blocking the event loop.
-                # Rate limiting is handled by the natural flow of message processing.
                 return True
 
         except Exception as e:
@@ -282,31 +328,59 @@ class MessageBroker(threading.Thread):
         except Exception as e:
             logger.error("mq disconnect error %s", e)
         self._stop_event.set()
+        # Wake the sender thread so it exits promptly.
+        self._send_queue.put(None)
 
     def run(self) -> None:
-        """Main thread method for receiving messages."""
+        """Main thread method for receiving messages.
+
+        Buffer incoming bytes and resync to a known frame-start marker before
+        slicing each 48-byte frame. A blind 48-byte read loop assumed the
+        stream was frame-aligned from connect; in practice the relay's auth
+        handshake skews alignment by a few bytes, after which every frame is
+        the tail of one real frame plus the head of the next. Such frames fail
+        the is_status / is_ping marker check (markers live at byte 0), so state
+        updates were silently dropped — commands kept working (independent send
+        path) while HA never saw new state. Resyncing fixes the skew and
+        self-heals on any future desync.
+        """
         logger.info(f"Message queue thread started for {self.host}:{self.port}")
+        recv_buffer = bytearray()
         while self.running and not self._stop_event.is_set():
             try:
-                # Read exactly 48 bytes
-                message_data = b''
-                while len(message_data) < 48:
-                    chunk = self.socket.recv(min(48 - len(message_data), self.buffer_size))
-                    if not chunk:
-                        logger.info("Server closed connection")
-                        break
-                    message_data += chunk
-
-                if len(message_data) == 48:
-                    logger.debug("Received socket command: %s", message_data.hex())
-                    message = Message(message_data)
-                    self.on_receive(message)
-                else:
+                chunk = self.socket.recv(self.buffer_size)
+                if not chunk:
+                    logger.info("Server closed connection")
+                    recv_buffer.clear()
                     self.on_disconnect()
                     continue
+                recv_buffer.extend(chunk)
+
+                # Drain every complete, frame-aligned message now buffered.
+                while True:
+                    start = self._find_frame_start(recv_buffer)
+                    if start < 0:
+                        # No marker yet. Keep a trailing byte in case a 2-byte
+                        # marker straddles this recv and the next.
+                        if len(recv_buffer) > 1:
+                            del recv_buffer[:-1]
+                        break
+                    if start > 0:
+                        logger.warning(
+                            "Higoal stream misaligned; discarding %d bytes to resync",
+                            start,
+                        )
+                        del recv_buffer[:start]
+                    if len(recv_buffer) < FRAME_SIZE:
+                        break  # wait for the rest of this frame
+                    frame = bytes(recv_buffer[:FRAME_SIZE])
+                    del recv_buffer[:FRAME_SIZE]
+                    logger.debug("Received socket command: %s", frame.hex())
+                    self.on_receive(Message(frame))
 
             except Exception as e:
                 logger.error(f"Error in receive loop: {e}")
+                recv_buffer.clear()
                 self.api.reset()
                 self.on_disconnect()
                 continue
@@ -322,3 +396,13 @@ class MessageBroker(threading.Thread):
                 self.socket = None
 
         logger.info("Message queue thread ended")
+
+    @staticmethod
+    def _find_frame_start(buffer: bytearray) -> int:
+        """Index of the earliest known frame-start marker, or -1 if none."""
+        earliest = -1
+        for marker in FRAME_START_MARKERS:
+            idx = buffer.find(marker)
+            if idx >= 0 and (earliest < 0 or idx < earliest):
+                earliest = idx
+        return earliest
