@@ -56,7 +56,22 @@ class Message:
 
     @property
     def is_status(self):
-        return self.data[0] == 187 and self.data[1] == 91
+        # bb5b marks server replies, but 0xf0 at byte 6 marks control-plane
+        # frames (f001 session ack, f009 device announce). Their payload
+        # carries no button states — parsing one as status reads every
+        # button as 0x00 (offline).
+        return self.data[0] == 187 and self.data[1] == 91 and self.data[6] != 240
+
+    @property
+    def is_announce(self):
+        # f009: device announce/presence, sent when a panel's cloud session
+        # (re)connects. All-zero payload; device id at bytes 9-12.
+        return (
+            self.data[0] == 187
+            and self.data[1] == 91
+            and self.data[6] == 240
+            and self.data[7] == 9
+        )
 
     @property
     def is_ping(self):
@@ -64,7 +79,7 @@ class Message:
 
     @property
     def device_identifier(self):
-        if self.is_status:
+        if self.is_status or self.is_announce:
             return self.data[9], self.data[10], self.data[11], self.data[12]
         elif self.is_ping:
             return self.data[3], self.data[4], self.data[5], self.data[6]

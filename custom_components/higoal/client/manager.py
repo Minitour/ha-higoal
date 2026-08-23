@@ -126,6 +126,15 @@ class Manager(MessageHandler):
 
     def on_receive(self, message: Message):
         self.check_offline_devices()
+
+        if message.is_announce:
+            # The panel's cloud session just (re)connected; its last real
+            # status may predate the announce, so ask for a fresh one.
+            device = self.device_map.get(message.device_identifier)
+            if device is not None and device is not UnknownDevice:
+                self.send_command(device.status_command())
+            return
+
         if not message.is_status:
             return
 
