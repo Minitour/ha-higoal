@@ -108,16 +108,33 @@ class Manager(MessageHandler):
             self.send_command(device.status_command())
 
     def check_offline_devices(self):
+        # Poll every device every cycle, not just the ones currently marked
+        # offline. Devices whose entities all report non-zero status bytes
+        # get dropped from self.offline_devices and would otherwise stop
+        # receiving polls entirely — leaving HA showing stale state with no
+        # way to learn about state changes made from the physical panel.
+        # The sender thread already paces individual sends; the 30 s gate
+        # below is the cycle interval.
         now = datetime.now()
         if now - self._last_offline_check < self._offline_check_interval:
             return
         self._last_offline_check = now
-        for offline_device in self.offline_devices.values():
-            offline_device.last_update = now
-            self.send_command(offline_device.device.status_command())
+        for device in self.device_map.values():
+            if device is UnknownDevice:
+                continue
+            self.send_command(device.status_command())
 
     def on_receive(self, message: Message):
         self.check_offline_devices()
+
+        if message.is_announce:
+            # The panel's cloud session just (re)connected; its last real
+            # status may predate the announce, so ask for a fresh one.
+            device = self.device_map.get(message.device_identifier)
+            if device is not None and device is not UnknownDevice:
+                self.send_command(device.status_command())
+            return
+
         if not message.is_status:
             return
 
